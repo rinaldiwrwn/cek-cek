@@ -29,7 +29,7 @@ Buka http://localhost:3000. Datanya palsu dan tidak ada yang dikirim ke Instagra
 
 ## Memasang di Vercel
 
-1. **Vercel**: import repo ini sebagai project baru.
+1. **Vercel**: import repo ini sebagai project baru (pastikan project tersambung ke repo ini, bukan repo lain).
 2. **Database**: di project Vercel buka tab Storage, tambahkan Neon (Postgres). `DATABASE_URL` terisi sendiri.
 3. **Meta**: di developers.facebook.com buat app, tambahkan produk Instagram dengan "Instagram Login",
    hubungkan akun lelang, beri izin `instagram_business_basic` dan `instagram_business_manage_comments`,
