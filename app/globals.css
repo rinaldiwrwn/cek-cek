@@ -18,6 +18,11 @@ main {
   max-width: 720px; margin: 0 auto;
   padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(64px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
 }
+/* Sebagian browser iPhone (mis. Brave) menggambar halaman di bawah status bar tanpa melaporkan
+   tingginya, jadi di layar ponsel jarak atas dipaksa cukup untuk melewati jam dan ikon sinyal. */
+@media (max-width: 600px) and (pointer: coarse) {
+  main { padding-top: max(72px, calc(16px + env(safe-area-inset-top))); }
+}
 h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
 h2 { font-size: 14px; margin: 20px 0 8px; }
 p { margin: 0; }
