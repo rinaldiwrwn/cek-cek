@@ -238,7 +238,7 @@ function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
 function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: boolean; toggle: () => void; act: (b: unknown) => Promise<void> }) {
   const ph = phase(p, now);
   const bids = p.rows.filter((r) => r.isBid);
-  // Perlu dicek: belum kamu putuskan, dan akunnya belum ditandai follow atau ada penanda.
+  // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
   const check = bids.filter((r) => !r.override && (!r.verified || r.flags.length > 0)).length;
   return (
     <li className={`post ${ph.key}`}>
@@ -341,21 +341,21 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
       <span className="who">
         <span className="user">
           @{r.username}{r.own ? ' (kamu)' : ''}
-          {r.isBid && (
+          {r.isBid && r.verified && (
             <button
-              className={`follow${r.verified ? ' on' : ''}`}
-              aria-pressed={r.verified}
-              title={r.verified ? 'Akun ini sudah kamu tandai follow. Ketuk untuk membatalkan.' : 'Tandai akun ini sudah follow'}
-              onClick={() => act({ type: 'verify', username: r.username, on: !r.verified })}
+              className="trusted"
+              title="Akun ini ada di daftar akun sah. Ketuk untuk mengeluarkannya."
+              onClick={() => confirm(`Keluarkan @${r.username} dari daftar akun sah?`) && act({ type: 'verify', username: r.username, on: false })}
             >
-              {r.verified ? '✓ Follow' : '+ Follow'}
+              ✓ Akun sah
             </button>
           )}
         </span>
         <span className="text">{r.text}</span>
-        {r.isBid && (r.flags.length > 0 || r.override) && (
+        {r.isBid && (r.flags.length > 0 || r.override || !r.verified) && (
           <span className="flags">
             {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan manual' : 'Ditolak manual'}</span>}
+            {!r.override && !r.verified && <span className="flag soft">Belum dicek</span>}
             {r.flags.map((f) => <span key={f} className={`flag${SOFT.includes(f) ? ' soft' : ''}`}>{FLAGS[f]}</span>)}
           </span>
         )}

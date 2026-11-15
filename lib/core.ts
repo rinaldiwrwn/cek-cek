@@ -1,7 +1,7 @@
 // Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
-import { parseCaption } from './parse';
+import { parseBid, parseCaption } from './parse';
 import { evaluate, SNIPER_MS, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -152,11 +152,13 @@ async function syncComments(postId: string) {
     );
   }
   // Komentar yang pernah terlihat tapi sekarang hilang ditandai dihapus; salinannya tetap disimpan.
-  await q(
+  const gone = await q(
     `UPDATE comments SET deleted_at = $2 WHERE post_id = $1 AND deleted_at IS NULL
-       AND id NOT IN (SELECT jsonb_array_elements_text($3::jsonb))`,
+       AND id NOT IN (SELECT jsonb_array_elements_text($3::jsonb)) RETURNING username, text`,
     [postId, now, JSON.stringify(list.map((c) => c.id))],
   );
+  // Akun yang menghapus bid dikeluarkan dari daftar akun sah.
+  for (const c of gone) if (parseBid(c.text)) await setVerified(c.username, false);
 }
 
 async function syncDuePosts(): Promise<boolean> {
@@ -267,7 +269,7 @@ export async function tick(loop: boolean) {
 
 // ---------- Data dashboard ----------
 
-/** Menandai akun sudah dipastikan follow. Berlaku di semua lelang, sekarang dan berikutnya. */
+/** Daftar akun sah: akun yang bid-nya pernah kamu sahkan. Berlaku di semua lelang, sekarang dan berikutnya. */
 export async function setVerified(username: string, on: boolean) {
   if (on) await q('INSERT INTO bidders (username, verified_at) VALUES ($1, $2) ON CONFLICT DO NOTHING', [username, iso(Date.now())]);
   else await q('DELETE FROM bidders WHERE username = $1', [username]);
@@ -275,8 +277,8 @@ export async function setVerified(username: string, on: boolean) {
 
 export async function setOverride(commentId: string, value: 'valid' | 'invalid' | null) {
   const r = await q('UPDATE comments SET override = $2 WHERE id = $1 RETURNING username', [commentId, value]);
-  // Mengesahkan bid berarti kamu sudah mengecek akunnya, jadi akun itu ikut ditandai.
-  if (value === 'valid' && r.length) await setVerified(r[0].username, true);
+  // Sah memasukkan akun ke daftar akun sah, Tolak mengeluarkannya.
+  if (value && r.length) await setVerified(r[0].username, value === 'valid');
 }
 
 export async function getState() {

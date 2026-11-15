@@ -18,7 +18,7 @@ export type Rules = {
   maxJump: number | null;
   closeAt: number | null;
   ownUsername: string | null;
-  verified?: Set<string>; // akun yang sudah kamu pastikan follow
+  verified?: Set<string>; // daftar akun sah
 };
 
 export type Flag =
