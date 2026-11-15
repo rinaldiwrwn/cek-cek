@@ -188,6 +188,12 @@ async function syncDuePosts(): Promise<boolean> {
   return hot;
 }
 
+/** Sinkron ringan tanpa menunggu jadwal komentar; dipakai mode demo sebelum data dibaca. */
+export async function refresh() {
+  await syncMedia();
+  await syncDuePosts();
+}
+
 // ---------- Komentar terjadwal ----------
 
 async function send(postId: string, kind: Kind) {
