@@ -33,12 +33,12 @@ const FLAGS: Record<string, string> = {
   tidakNaik: 'Tidak lebih tinggi',
   kelipatan: 'Bukan kelipatan',
   maxJump: 'Lewat max jump',
-  dihapus: 'Dihapus',
+  dihapus: '⚠ Terhapus',
   tanpaAcuan: 'Belum ada bid acuan',
-  cek: 'Perlu dicek',
+  cek: 'Cek teks',
   balasan: 'Balasan',
 };
-const SOFT = ['cek', 'balasan'];
+const SOFT = ['cek', 'balasan', 'dihapus'];
 
 async function api(path: string, body?: unknown) {
   const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -238,7 +238,8 @@ function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
 function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: boolean; toggle: () => void; act: (b: unknown) => Promise<void> }) {
   const ph = phase(p, now);
   const bids = p.rows.filter((r) => r.isBid);
-  const check = bids.filter((r) => !r.override && r.flags.some((f) => !SOFT.includes(f) || f === 'cek')).length;
+  // Perlu dicek: belum kamu putuskan, dan akunnya belum ditandai follow atau ada penanda.
+  const check = bids.filter((r) => !r.override && (!r.verified || r.flags.length > 0)).length;
   return (
     <li className={`post ${ph.key}`}>
       <button className="summary" onClick={toggle} aria-expanded={open}>
@@ -338,7 +339,19 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
     <li className={`${r.isBid ? (r.valid ? 'valid' : 'invalid') : 'chat'}${top ? ' leader' : ''}`}>
       <span className="when">{time(r.ts)}</span>
       <span className="who">
-        <span className="user">@{r.username}{r.own ? ' (kamu)' : ''}</span>
+        <span className="user">
+          @{r.username}{r.own ? ' (kamu)' : ''}
+          {r.isBid && (
+            <button
+              className={`follow${r.verified ? ' on' : ''}`}
+              aria-pressed={r.verified}
+              title={r.verified ? 'Akun ini sudah kamu tandai follow. Ketuk untuk membatalkan.' : 'Tandai akun ini sudah follow'}
+              onClick={() => act({ type: 'verify', username: r.username, on: !r.verified })}
+            >
+              {r.verified ? '✓ Follow' : '+ Follow'}
+            </button>
+          )}
+        </span>
         <span className="text">{r.text}</span>
         {r.isBid && (r.flags.length > 0 || r.override) && (
           <span className="flags">

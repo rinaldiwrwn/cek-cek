@@ -59,18 +59,22 @@ export function parseCaption(caption: string): CaptionInfo {
   };
 }
 
-export type ParsedBid = { kind: 'abs' | 'rel'; value: number; sure: boolean };
+export type ParsedBid = { kind: 'abs' | 'rel' | 'ob'; value: number; sure: boolean };
 
-/** Membaca bid dari komentar: "150", "2.100", "+50", "bid 150", "1,5jt". null kalau bukan bid. */
+// Embel-embel yang lazim di komentar bid; tidak membuat bid ditandai "perlu dicek".
+const FILLER = /\b(bid|ob|open\s*bid|a?gan|om|bang|bg|mi?min|kak?|bro|boss?|pak|mas|ya|nih|deh|dong)\b/g;
+const hasWords = (s: string) => /\p{L}|\d/u.test(s.replace(FILLER, ' '));
+
+/** Membaca bid dari komentar: "150", "2.100", "+50", "bid 250k", "150 gan", "ob". null kalau bukan bid. */
 export function parseBid(text: string): ParsedBid | null {
   const t = norm(text || '').replace(/@[\w.]+/g, ' ').toLowerCase().trim();
   const rel = t.match(new RegExp(`(?:^|\\s)\\+\\s*([\\d.,]*\\d)\\s*${UNIT}?(?![a-z\\d:])`));
   const abs = rel ? null : t.match(new RegExp(`(?<![\\w.,+:])([\\d.,]*\\d)\\s*${UNIT}?(?![a-z\\d:])`));
   const m = rel || abs;
-  if (!m) return null;
+  // "ob" tanpa angka berarti bid di harga open bid.
+  if (!m) return /\b(ob|open\s*bid)\b/.test(t) ? { kind: 'ob', value: 0, sure: !hasWords(t) } : null;
   const value = toRb(m[1], m[2]);
   if (value == null || value <= 0) return null;
-  // "Yakin" kalau komentar hanya berisi angka (boleh diawali kata "bid"); selain itu perlu dicek.
-  const rest = t.replace(m[0], ' ').replace(/\bbid\b/g, ' ');
-  return { kind: rel ? 'rel' : 'abs', value, sure: !/\p{L}|\d/u.test(rest) };
+  // "Yakin" kalau selain angka hanya ada embel-embel lazim; kalau ada kata lain, perlu dicek.
+  return { kind: rel ? 'rel' : 'abs', value, sure: !hasWords(t.replace(m[0], ' ')) };
 }

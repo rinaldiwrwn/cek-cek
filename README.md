@@ -7,10 +7,12 @@ otomatis "Sniper Zone" (5 menit sebelum close) serta "Close" (detik ke-59 sebelu
 
 - Postingan, caption, dan komentar diambil lewat API resmi Instagram.
 - Open bid, kelipatan, max jump, tanggal dan jam close dibaca dari caption. Semuanya bisa dikoreksi di dashboard.
-- Bid dibaca dari komentar (`150`, `2.100`, `+50`). Nominal dalam ribuan rupiah.
+- Bid dibaca dari komentar (`150`, `2.100`, `+50`, `bid 250k`, `150 gan`, `ob`). Nominal dalam ribuan rupiah.
 - Penanda (terlambat, belum pernah bid di sniper zone, bukan kelipatan, dsb.) hanya saran.
   Tombol **Sah** / **Tolak** menentukan keputusan akhir, dan `+50` dihitung dari bid sah tertinggi.
-- Semua komentar disimpan sejak pertama terlihat, jadi bid yang dihapus tetap tercatat.
+- Semua komentar disimpan sejak pertama terlihat. Bid yang dihapus tetap dihitung dan diberi tanda "⚠ Terhapus".
+- Menekan **Sah** menandai akun itu "✓ Follow". Tandanya muncul di semua bid akun tersebut, di lelang mana pun,
+  dan bisa dinyalakan atau dimatikan langsung lewat tombol di samping nama akun.
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
 - Komentar otomatis **mati secara bawaan**. Nyalakan per postingan atau lewat "Aktifkan semua auto-komentar".
 

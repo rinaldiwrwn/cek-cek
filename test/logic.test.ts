@@ -41,7 +41,12 @@ test('bid dari komentar', () => {
   assert.deepEqual(v('1,5jt'), { kind: 'abs', value: 1500, sure: true });
   assert.deepEqual(v('150.000'), { kind: 'abs', value: 150, sure: true });
   assert.deepEqual(v('150 🙏'), { kind: 'abs', value: 150, sure: true });
-  assert.deepEqual(v('@teman 300 gan'), { kind: 'abs', value: 300, sure: false });
+  assert.deepEqual(v('@teman 300 gan'), { kind: 'abs', value: 300, sure: true });
+  assert.deepEqual(v('bid 250k'), { kind: 'abs', value: 250, sure: true });
+  assert.deepEqual(v('ob 100'), { kind: 'abs', value: 100, sure: true });
+  assert.deepEqual(v('OB gan'), { kind: 'ob', value: 0, sure: true });
+  assert.deepEqual(v('300 kalau boleh nego'), { kind: 'abs', value: 300, sure: false });
+  assert.equal(v('obral ya'), null);
   assert.equal(v('diameter 47mm ya?'), null);
   assert.equal(v('close jam 19:00?'), null);
   assert.equal(v('mantap min'), null);
@@ -83,16 +88,18 @@ test('penilaian bid', () => {
 test('keputusan manual dan bid dihapus', () => {
   const { rows, top } = evaluate(
     [
-      c(1, 'a', '100', 3600),
+      c(1, 'a', 'ob', 3600),
       c(2, 'b', '150', 3500, { deleted: true }),
-      c(3, 'c', '+50', 3400), // dihitung dari 100 karena 150 dihapus
+      c(3, 'c', '+50', 3400), // 200: bid yang terhapus tetap dihitung, hanya ditandai
       c(4, 'd', '500', 3300, { override: 'valid' }), // lewat max jump tapi disahkan manual
       c(5, 'e', '+50', 3200, { override: 'invalid' }),
     ],
     rules,
   );
-  assert.equal(rows[1].valid, false);
-  assert.equal(rows[2].amount, 150);
+  assert.equal(rows[0].amount, 100);
+  assert.equal(rows[1].valid, true);
+  assert.deepEqual(rows[1].flags, ['dihapus']);
+  assert.equal(rows[2].amount, 200);
   assert.equal(rows[3].valid, true);
   assert.equal(rows[4].amount, 550);
   assert.equal(top?.id, '4');

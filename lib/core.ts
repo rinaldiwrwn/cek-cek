@@ -267,20 +267,30 @@ export async function tick(loop: boolean) {
 
 // ---------- Data dashboard ----------
 
+/** Menandai akun sudah dipastikan follow. Berlaku di semua lelang, sekarang dan berikutnya. */
+export async function setVerified(username: string, on: boolean) {
+  if (on) await q('INSERT INTO bidders (username, verified_at) VALUES ($1, $2) ON CONFLICT DO NOTHING', [username, iso(Date.now())]);
+  else await q('DELETE FROM bidders WHERE username = $1', [username]);
+}
+
 export async function setOverride(commentId: string, value: 'valid' | 'invalid' | null) {
-  await q('UPDATE comments SET override = $2 WHERE id = $1', [commentId, value]);
+  const r = await q('UPDATE comments SET override = $2 WHERE id = $1 RETURNING username', [commentId, value]);
+  // Mengesahkan bid berarti kamu sudah mengecek akunnya, jadi akun itu ikut ditandai.
+  if (value === 'valid' && r.length) await setVerified(r[0].username, true);
 }
 
 export async function getState() {
-  const [posts, comments, events, me, lastError, lastOk] = await Promise.all([
+  const [posts, comments, events, bidders, me, lastError, lastOk] = await Promise.all([
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT * FROM events'),
+    q('SELECT username FROM bidders'),
     getKv<{ username: string }>('me'),
     getKv<{ message: string; at: number }>('lastError'),
     getKv<number>('lastOk'),
   ]);
 
+  const verified = new Set(bidders.map((b) => b.username as string));
   const byPost = new Map<string, CommentIn[]>();
   for (const c of comments) {
     const list = byPost.get(c.post_id) || [];
@@ -298,7 +308,7 @@ export async function getState() {
     posts: posts.map((p) => {
       const closeAt = toMs(p.close_at);
       const { rows, top } = evaluate(byPost.get(p.id) || [], {
-        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null,
+        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null, verified,
       });
       const ev: Record<string, unknown> = {};
       for (const e of events) {

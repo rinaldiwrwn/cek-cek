@@ -18,6 +18,7 @@ const SCHEMA = [
      status text NOT NULL DEFAULT 'pending', claimed_at timestamptz, sent_at timestamptz,
      comment_id text, error text, PRIMARY KEY (post_id, kind))`,
   `CREATE TABLE IF NOT EXISTS kv (key text PRIMARY KEY, value jsonb)`,
+  `CREATE TABLE IF NOT EXISTS bidders (username text PRIMARY KEY, verified_at timestamptz NOT NULL)`,
 ];
 
 async function connect(): Promise<Run> {

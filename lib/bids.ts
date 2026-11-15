@@ -18,17 +18,19 @@ export type Rules = {
   maxJump: number | null;
   closeAt: number | null;
   ownUsername: string | null;
+  verified?: Set<string>; // akun yang sudah kamu pastikan follow
 };
 
 export type Flag =
   | 'terlambat' | 'sniper' | 'bawahOb' | 'tidakNaik' | 'kelipatan'
   | 'maxJump' | 'dihapus' | 'tanpaAcuan' | 'cek' | 'balasan';
 
-// Penanda yang tidak membuat bid otomatis dianggap tidak sah.
-const SOFT: Flag[] = ['cek', 'balasan'];
+// Penanda yang hanya informasi: bid tetap dihitung kecuali kamu menolaknya.
+const SOFT: Flag[] = ['cek', 'balasan', 'dihapus'];
 
 export type BidRow = CommentIn & {
   own: boolean;
+  verified: boolean;
   isBid: boolean;
   amount: number | null;
   flags: Flag[];
@@ -52,11 +54,11 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
     const p = own ? null : parseBid(c.text);
     if (!p) {
-      rows.push({ ...c, own, isBid: false, amount: null, flags: [], valid: false });
+      rows.push({ ...c, own, verified: false, isBid: false, amount: null, flags: [], valid: false });
       continue;
     }
     const current: number | null = top ? top.amount : null;
-    const amount = p.kind === 'abs' ? p.value : current != null ? current + p.value : null;
+    const amount = p.kind === 'abs' ? p.value : p.kind === 'ob' ? r.openBid : current != null ? current + p.value : null;
     const flags: Flag[] = [];
 
     if (c.deleted) flags.push('dihapus');
@@ -75,7 +77,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
 
     const auto = flags.every((f) => SOFT.includes(f));
     const valid = amount != null && (c.override ? c.override === 'valid' : auto);
-    const row: BidRow = { ...c, own, isBid: true, amount, flags, valid };
+    const row: BidRow = { ...c, own, verified: !!r.verified?.has(c.username), isBid: true, amount, flags, valid };
     rows.push(row);
 
     if (valid) {
