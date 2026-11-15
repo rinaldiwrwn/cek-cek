@@ -11,6 +11,7 @@ otomatis "Sniper Zone" (5 menit sebelum close) serta "Close" (detik ke-59 sebelu
 - Penanda (terlambat, belum pernah bid di sniper zone, bukan kelipatan, dsb.) hanya saran.
   Tombol **Sah** / **Tolak** menentukan keputusan akhir, dan `+50` dihitung dari bid sah tertinggi.
 - Semua komentar disimpan sejak pertama terlihat. Bid yang dihapus tetap dihitung dan diberi tanda "⚠ Terhapus".
+- Tiap bid punya tiga tombol: ✅ Sah, ❌ Tolak, 😂 Salah bid.
 - Menekan **Sah** memasukkan akun ke daftar akun sah: bid berikutnya dari akun itu, di lelang mana pun, langsung
   bertanda "✓ Akun sah". **Salah bid** membatalkan satu bid tanpa mengubah daftar. Akun keluar dari daftar kalau kamu menekan **Tolak**, kalau ia menghapus bid, atau kalau
   kamu mengetuk tanda "✓ Akun sah". Bid dari akun di luar daftar bertanda "Belum dicek".

@@ -364,9 +364,9 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
         <span className="amount">
           <strong>{rb(r.amount)}</strong>
           <span className="decide">
-            <button className={r.override === 'valid' ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Tandai sah" aria-pressed={r.override === 'valid'}>Sah</button>
-            <button className={r.override === 'invalid' ? 'on bad' : ''} onClick={() => set('invalid')} title="Bid tidak sah dan akun dikeluarkan dari daftar akun sah" aria-pressed={r.override === 'invalid'}>Tolak</button>
-            <button className={r.override === 'wrong' ? 'on bad' : ''} onClick={() => set('wrong')} title="Bid ini tidak dihitung, akun tetap di daftar akun sah" aria-pressed={r.override === 'wrong'}>Salah bid</button>
+            <button className={r.override === 'valid' ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid'}>✅</button>
+            <button className={r.override === 'invalid' ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid tidak dihitung, akun keluar dari daftar akun sah" aria-pressed={r.override === 'invalid'}>❌</button>
+            <button className={r.override === 'wrong' ? 'on bad' : ''} onClick={() => set('wrong')} aria-label="Salah bid" title="Salah bid: bid tidak dihitung, akun tetap di daftar akun sah" aria-pressed={r.override === 'wrong'}>😂</button>
           </span>
         </span>
       )}
