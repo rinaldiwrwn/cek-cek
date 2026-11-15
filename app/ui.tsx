@@ -235,6 +235,23 @@ function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
   );
 }
 
+/** Status jadwal komentar beserta tombol kirim manual, selama komentarnya belum terkirim. */
+function EventSlot({ p, kind, now, act }: { p: Post; kind: Kind; now: number; act: (b: unknown) => Promise<void> }) {
+  const e = p.events[kind];
+  if (!e) return null;
+  const label = kind === 'sniper' ? 'Sniper Zone' : 'Close';
+  return (
+    <span className="slot">
+      <EventChip p={p} kind={kind} now={now} />
+      {e.status !== 'sent' && e.status !== 'claimed' && (
+        <button className="mini" onClick={() => confirm(`Kirim komentar ${label} ke "${p.title}" sekarang?`) && act({ type: 'send', id: p.id, kind })}>
+          Kirim
+        </button>
+      )}
+    </span>
+  );
+}
+
 function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: boolean; toggle: () => void; act: (b: unknown) => Promise<void> }) {
   const ph = phase(p, now);
   const bids = p.rows.filter((r) => r.isBid);
@@ -257,8 +274,8 @@ function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: b
       </button>
 
       <div className="chips">
-        <EventChip p={p} kind="sniper" now={now} />
-        <EventChip p={p} kind="close" now={now} />
+        <EventSlot p={p} kind="sniper" now={now} act={act} />
+        <EventSlot p={p} kind="close" now={now} act={act} />
         <label className="switch">
           <input type="checkbox" checked={p.autoComment} disabled={p.closeAt == null} onChange={(e) => act({ type: 'post', id: p.id, patch: { autoComment: e.target.checked } })} />
           Auto-komentar
@@ -281,16 +298,6 @@ function Detail({ p, act }: { p: Post; act: (b: unknown) => Promise<void> }) {
       <input type="number" inputMode="numeric" min="0" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
     </label>
   );
-  const manual = (kind: Kind, label: string) => {
-    const e = p.events[kind];
-    if (!e || e.status === 'sent' || e.status === 'claimed') return null;
-    return (
-      <button onClick={() => confirm(`Kirim komentar ${label} ke postingan ini sekarang?`) && act({ type: 'send', id: p.id, kind })}>
-        Kirim {label} sekarang
-      </button>
-    );
-  };
-
   return (
     <div className="detail">
       <div className="rowhead">
@@ -325,8 +332,6 @@ function Detail({ p, act }: { p: Post; act: (b: unknown) => Promise<void> }) {
       </form>
 
       <div className="toolbar">
-        {manual('sniper', 'Sniper Zone')}
-        {manual('close', 'Close')}
         <a href={p.permalink} target="_blank" rel="noreferrer">Buka di Instagram</a>
       </div>
     </div>
