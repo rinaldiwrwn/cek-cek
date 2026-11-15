@@ -91,6 +91,7 @@ export function Dashboard() {
   const [error, setError] = useState('');
   const [now, setNow] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  const [seq, setSeq] = useState<string | null>(null);
   const offset = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -162,7 +163,41 @@ export function Dashboard() {
         >
           {allOn ? 'Matikan semua auto-komentar' : 'Aktifkan semua auto-komentar'}
         </button>
+        <button
+          aria-expanded={seq != null}
+          onClick={() => {
+            if (seq != null) return setSeq(null);
+            const first = Math.min(...state.posts.map((p) => p.closeAt ?? Infinity));
+            // Bawaan: jam close paling awal yang sudah ada, atau hari ini 19:00 WIB.
+            const today = Math.floor((now + WIB) / 86_400_000) * 86_400_000 - WIB + 19 * 3_600_000;
+            setSeq(toInput(Number.isFinite(first) ? first : today));
+          }}
+        >
+          Atur jam close berurutan
+        </button>
       </div>
+
+      {seq != null && (
+        <form
+          className="note seq"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const startAt = fromInput(seq);
+            if (startAt == null) return;
+            const n = Math.min(state.posts.length, 9);
+            const last = startAt + (n - 1) * 5 * 60_000;
+            if (!confirm(`Atur ulang jam close ${n} postingan terakhir?\n\nPostingan terlama close ${time(startAt)}, berikutnya tiap 5 menit, terakhir ${time(last)}.\nJam close yang sekarang akan ditimpa.`)) return;
+            await act({ type: 'sequence', startAt });
+            setSeq(null);
+          }}
+        >
+          <label>
+            Jam close postingan terlama (WIB). Postingan berikutnya mundur 5 menit.
+            <input type="datetime-local" step="1" value={seq} onChange={(e) => setSeq(e.target.value)} required />
+          </label>
+          <button className="primary">Terapkan</button>
+        </form>
+      )}
 
       {!state.posts.length && <p className="muted pad">Belum ada postingan yang terbaca.</p>}
       <ul className="posts">

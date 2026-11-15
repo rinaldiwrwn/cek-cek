@@ -91,3 +91,5 @@ input[type='number'], input[type='password'], input[type='datetime-local'] { wid
 .login { max-width: 360px; padding-top: 18vh; }
 .login form { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .error { color: var(--bad); font-size: 13.5px; }
+.seq { display: flex; flex-direction: column; gap: 10px; }
+.seq label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }

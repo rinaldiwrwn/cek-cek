@@ -109,6 +109,14 @@ export async function updatePost(id: string, patch: PostPatch) {
   if (r.length && 'closeAt' in patch) await ensureEvents(id, toMs(r[0].close_at));
 }
 
+/** Postingan terlama dari 9 terakhir close di startAt, berikutnya mundur stepMin menit, dan seterusnya. */
+export async function setSequence(startAt: number, stepMin = 5) {
+  if (!Number.isFinite(startAt) || !(stepMin > 0)) throw new Error('Jam tidak valid');
+  const posts = await q('SELECT id FROM posts WHERE in_latest ORDER BY posted_at ASC');
+  for (const [i, p] of posts.entries()) await updatePost(p.id, { closeAt: startAt + i * stepMin * MIN });
+  return posts.length;
+}
+
 // ---------- Komentar ----------
 
 /** Seberapa sering komentar sebuah postingan dicek, tergantung jarak ke jam close. null = berhenti. */
