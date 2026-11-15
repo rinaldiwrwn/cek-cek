@@ -1,0 +1,311 @@
+// Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
+import { getKv, q, setKv } from './db';
+import * as ig from './ig';
+import { parseCaption } from './parse';
+import { evaluate, SNIPER_MS, type CommentIn } from './bids';
+
+const MIN = 60_000;
+const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
+const MISSED_AFTER = 20_000; // lebih telat dari ini tidak dikirim otomatis
+const CLOSE_LEAD = 1_000; // "Close" dikirim di detik ke-59 sebelum jam close
+
+export type Kind = 'sniper' | 'close';
+export const texts = () => ({
+  sniper: process.env.SNIPER_TEXT || '🎯 SNIPER ZONE! 🎯',
+  close: process.env.CLOSE_TEXT || '❌ LELANG CLOSED! ❌',
+});
+
+const iso = (ms: number) => new Date(ms).toISOString();
+const toMs = (v: unknown) => (v == null ? null : new Date(v as string).getTime());
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+const noteError = (e: unknown) => setKv('lastError', { message: String((e as Error)?.message || e), at: Date.now() }).catch(() => {});
+
+// ---------- Postingan ----------
+
+async function ensureEvents(postId: string, closeAt: number | null) {
+  if (closeAt == null) {
+    await q(`DELETE FROM events WHERE post_id = $1 AND status IN ('pending','missed')`, [postId]);
+    return;
+  }
+  // Jadwal yang sudah terkirim / sedang diproses tidak diubah; yang terlewat atau gagal dijadwalkan ulang kalau jamnya berubah.
+  await q(
+    `INSERT INTO events (post_id, kind, due_at) VALUES ($1,'sniper',$2), ($1,'close',$3)
+     ON CONFLICT (post_id, kind) DO UPDATE SET
+       status = CASE WHEN events.due_at <> EXCLUDED.due_at THEN 'pending' ELSE events.status END,
+       error = CASE WHEN events.due_at <> EXCLUDED.due_at THEN NULL ELSE events.error END,
+       due_at = EXCLUDED.due_at
+     WHERE events.status IN ('pending','missed','failed')`,
+    [postId, iso(closeAt - SNIPER_MS), iso(closeAt - CLOSE_LEAD)],
+  );
+}
+
+export async function syncMedia(force = false) {
+  const last = await getKv<number>('mediaSyncedAt');
+  if (!force && last && Date.now() - last < 5 * MIN) return;
+  await setKv('mediaSyncedAt', Date.now());
+
+  await setKv('me', await ig.getMe());
+  const media = await ig.listMedia(9);
+  const existing = new Map((await q('SELECT * FROM posts')).map((p) => [p.id as string, p]));
+  await q('UPDATE posts SET in_latest = false');
+
+  await Promise.all(
+    media.map(async (m) => {
+      const parsed = parseCaption(m.caption);
+      const ex = existing.get(m.id);
+      const manual = ex?.manual || {};
+      // Nilai yang sudah kamu ubah manual tidak ditimpa oleh hasil baca caption.
+      const v = {
+        title: manual.title ? ex!.title : parsed.title,
+        openBid: manual.openBid ? ex!.open_bid : parsed.openBid,
+        increment: manual.increment ? ex!.increment : parsed.increment,
+        maxJump: manual.maxJump ? ex!.max_jump : parsed.maxJump,
+        closeAt: manual.closeAt ? toMs(ex!.close_at) : parsed.closeAt,
+      };
+      await q(
+        `INSERT INTO posts (id, permalink, caption, thumb, posted_at, title, open_bid, increment, max_jump, close_at, in_latest)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+         ON CONFLICT (id) DO UPDATE SET permalink=$2, caption=$3, thumb=$4, posted_at=$5, title=$6,
+           open_bid=$7, increment=$8, max_jump=$9, close_at=$10, in_latest=true`,
+        [m.id, m.permalink, m.caption, m.thumb, iso(m.ts), v.title, v.openBid, v.increment, v.maxJump, v.closeAt == null ? null : iso(v.closeAt)],
+      );
+      await ensureEvents(m.id, v.closeAt);
+    }),
+  );
+}
+
+export type PostPatch = {
+  title?: string;
+  openBid?: number | null;
+  increment?: number | null;
+  maxJump?: number | null;
+  closeAt?: number | null;
+  autoComment?: boolean;
+};
+
+export async function updatePost(id: string, patch: PostPatch) {
+  const cols: Record<string, string> = { title: 'title', openBid: 'open_bid', increment: 'increment', maxJump: 'max_jump', closeAt: 'close_at' };
+  const sets: string[] = [];
+  const params: unknown[] = [id];
+  const manual: Record<string, true> = {};
+  for (const [key, col] of Object.entries(cols)) {
+    if (!(key in patch)) continue;
+    let val = (patch as any)[key];
+    if (key === 'closeAt') val = val == null ? null : iso(Number(val));
+    else if (key !== 'title') val = val == null || val === '' ? null : Math.round(Number(val));
+    if (typeof val === 'number' && !Number.isFinite(val)) throw new Error('Angka tidak valid');
+    params.push(val);
+    sets.push(`${col} = $${params.length}`);
+    manual[key] = true;
+  }
+  if (typeof patch.autoComment === 'boolean') {
+    params.push(patch.autoComment);
+    sets.push(`auto_comment = $${params.length}`);
+  }
+  if (!sets.length) return;
+  params.push(JSON.stringify(manual));
+  sets.push(`manual = manual || $${params.length}::jsonb`);
+  const r = await q(`UPDATE posts SET ${sets.join(', ')} WHERE id = $1 RETURNING close_at`, params);
+  if (r.length && 'closeAt' in patch) await ensureEvents(id, toMs(r[0].close_at));
+}
+
+// ---------- Komentar ----------
+
+/** Seberapa sering komentar sebuah postingan dicek, tergantung jarak ke jam close. null = berhenti. */
+function syncInterval(closeAt: number | null, now: number): number | null {
+  if (closeAt == null) return 5 * MIN;
+  const d = closeAt - now;
+  if (d > 60 * MIN) return 5 * MIN;
+  if (d > 10 * MIN) return MIN;
+  if (d > -2 * MIN) return 8_000;
+  if (d > -30 * MIN) return 2 * MIN;
+  if (d > -24 * 60 * MIN) return 30 * MIN;
+  return null;
+}
+const isHot = (closeAt: number | null, now: number) => closeAt != null && closeAt - now <= 10 * MIN && closeAt - now > -2 * MIN;
+
+const VISIBLE = `(in_latest OR close_at > now() - interval '24 hours')`;
+
+async function syncComments(postId: string) {
+  const list = await ig.listComments(postId);
+  const now = iso(Date.now());
+  for (let i = 0; i < list.length; i += 100) {
+    const chunk = list.slice(i, i + 100);
+    const params: unknown[] = [postId, now];
+    const values = chunk.map((c) => {
+      params.push(c.id, c.parentId, c.username, c.text, iso(c.ts));
+      const n = params.length;
+      return `($${n - 4}, $1, $${n - 3}, $${n - 2}, $${n - 1}, $${n}, $2)`;
+    });
+    await q(
+      `INSERT INTO comments (id, post_id, parent_id, username, text, ts, first_seen) VALUES ${values.join(',')}
+       ON CONFLICT (id) DO UPDATE SET deleted_at = NULL`,
+      params,
+    );
+  }
+  // Komentar yang pernah terlihat tapi sekarang hilang ditandai dihapus; salinannya tetap disimpan.
+  await q(
+    `UPDATE comments SET deleted_at = $2 WHERE post_id = $1 AND deleted_at IS NULL
+       AND id NOT IN (SELECT jsonb_array_elements_text($3::jsonb))`,
+    [postId, now, JSON.stringify(list.map((c) => c.id))],
+  );
+}
+
+async function syncDuePosts(): Promise<boolean> {
+  const now = Date.now();
+  const posts = await q(`SELECT id, close_at, last_sync FROM posts WHERE ${VISIBLE}`);
+  let hot = false;
+  await Promise.all(
+    posts.map(async (p) => {
+      const closeAt = toMs(p.close_at);
+      hot ||= isHot(closeAt, now);
+      const every = syncInterval(closeAt, now);
+      if (every == null) return;
+      // Diklaim lewat database supaya dua proses yang berjalan bersamaan tidak mengecek postingan yang sama.
+      const claimed = await q(
+        `UPDATE posts SET last_sync = $2 WHERE id = $1 AND (last_sync IS NULL OR last_sync <= $3) RETURNING id`,
+        [p.id, iso(now), iso(now - every)],
+      );
+      if (!claimed.length) return;
+      try {
+        await syncComments(p.id);
+        await setKv('lastOk', now);
+      } catch (e) {
+        await noteError(e);
+      }
+    }),
+  );
+  return hot;
+}
+
+// ---------- Komentar terjadwal ----------
+
+async function send(postId: string, kind: Kind) {
+  const message = texts()[kind];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const commentId = await ig.postComment(postId, message);
+      await q(`UPDATE events SET status='sent', sent_at=$3, comment_id=$4, error=NULL WHERE post_id=$1 AND kind=$2`, [postId, kind, iso(Date.now()), commentId]);
+      return;
+    } catch (e) {
+      lastErr = e;
+      await sleep(300);
+    }
+  }
+  const msg = String((lastErr as Error)?.message || lastErr);
+  await q(`UPDATE events SET status='failed', error=$3 WHERE post_id=$1 AND kind=$2`, [postId, kind, msg]);
+  await noteError(lastErr);
+}
+
+async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
+  const due = toMs(ev.due_at)!;
+  await sleep(due - Date.now() - 1500);
+  // Cek ulang sesaat sebelum kirim: auto-komentar bisa saja dimatikan atau jamnya diubah.
+  const r = await q(
+    `SELECT e.status, e.due_at, p.auto_comment FROM events e JOIN posts p ON p.id = e.post_id WHERE e.post_id=$1 AND e.kind=$2`,
+    [ev.post_id, ev.kind],
+  );
+  if (!r.length || r[0].status !== 'claimed') return;
+  if (!r[0].auto_comment || toMs(r[0].due_at) !== due) {
+    await q(`UPDATE events SET status='pending' WHERE post_id=$1 AND kind=$2 AND status='claimed'`, [ev.post_id, ev.kind]);
+    return;
+  }
+  await sleep(due - Date.now());
+  await send(ev.post_id, ev.kind);
+}
+
+export async function sendNow(postId: string, kind: Kind) {
+  const r = await q(
+    `UPDATE events SET status='claimed', claimed_at=$3 WHERE post_id=$1 AND kind=$2 AND status IN ('pending','missed','failed') RETURNING kind`,
+    [postId, kind, iso(Date.now())],
+  );
+  if (!r.length) throw new Error('Komentar ini sudah terkirim atau sedang diproses');
+  await send(postId, kind);
+}
+
+/** Dipanggil tiap menit oleh cron (loop = true) dan tiap beberapa detik oleh dashboard yang sedang terbuka. */
+export async function tick(loop: boolean) {
+  const started = Date.now();
+  if (!ig.hasToken()) return;
+  try {
+    await syncMedia();
+  } catch (e) {
+    await noteError(e);
+  }
+
+  const now = Date.now();
+  await q(`UPDATE events SET status='missed' WHERE status='pending' AND due_at < $1`, [iso(now - MISSED_AFTER)]);
+  await q(
+    `UPDATE events SET status='failed', error='Proses berhenti sebelum komentar terkirim' WHERE status='claimed' AND due_at < $1`,
+    [iso(now - 3 * MIN)],
+  );
+  const claimed = await q(
+    `UPDATE events e SET status='claimed', claimed_at=$1 FROM posts p
+     WHERE p.id = e.post_id AND p.auto_comment AND e.status='pending' AND e.due_at <= $2
+     RETURNING e.post_id, e.kind, e.due_at`,
+    [iso(now), iso(now + LOOKAHEAD)],
+  );
+  const timers = claimed.map((ev) => fire(ev as any).catch(noteError));
+
+  // Saat ada lelang mendekati close, cron terus mengecek komentar selama ±55 detik sampai tick berikutnya.
+  for (;;) {
+    const hot = await syncDuePosts().catch(() => false);
+    if (!loop || !hot || Date.now() - started > 50_000) break;
+    await sleep(4_000);
+  }
+  await Promise.all(timers);
+}
+
+// ---------- Data dashboard ----------
+
+export async function setOverride(commentId: string, value: 'valid' | 'invalid' | null) {
+  await q('UPDATE comments SET override = $2 WHERE id = $1', [commentId, value]);
+}
+
+export async function getState() {
+  const [posts, comments, events, me, lastError, lastOk] = await Promise.all([
+    q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
+    q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
+    q('SELECT * FROM events'),
+    getKv<{ username: string }>('me'),
+    getKv<{ message: string; at: number }>('lastError'),
+    getKv<number>('lastOk'),
+  ]);
+
+  const byPost = new Map<string, CommentIn[]>();
+  for (const c of comments) {
+    const list = byPost.get(c.post_id) || [];
+    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override });
+    byPost.set(c.post_id, list);
+  }
+
+  return {
+    now: Date.now(),
+    mock: ig.isMock(),
+    setup: { token: ig.hasToken(), cron: !!process.env.CRON_SECRET },
+    me: me?.username || null,
+    lastError: lastError && (!lastOk || lastError.at > lastOk) ? lastError : null,
+    texts: texts(),
+    posts: posts.map((p) => {
+      const closeAt = toMs(p.close_at);
+      const { rows, top } = evaluate(byPost.get(p.id) || [], {
+        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null,
+      });
+      const ev: Record<string, unknown> = {};
+      for (const e of events) {
+        if (e.post_id === p.id) ev[e.kind] = { dueAt: toMs(e.due_at), status: e.status, sentAt: toMs(e.sent_at), error: e.error };
+      }
+      return {
+        id: p.id as string, title: p.title as string, permalink: p.permalink as string, thumb: p.thumb as string | null,
+        closeAt, openBid: p.open_bid as number | null, increment: p.increment as number | null, maxJump: p.max_jump as number | null,
+        autoComment: p.auto_comment as boolean, lastSync: toMs(p.last_sync),
+        events: ev as Partial<Record<Kind, { dueAt: number; status: string; sentAt: number | null; error: string | null }>>,
+        top: top ? { amount: top.amount!, username: top.username, ts: top.ts } : null,
+        rows: rows.reverse(),
+      };
+    }),
+  };
+}
+
+export type State = Awaited<ReturnType<typeof getState>>;
