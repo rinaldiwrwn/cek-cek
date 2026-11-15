@@ -40,6 +40,14 @@ async function ensureEvents(postId: string, closeAt: number | null) {
 }
 
 export async function syncMedia(force = false) {
+  // Saat berpindah antara mode demo dan akun asli, data mode sebelumnya dibuang supaya tidak tercampur.
+  const mode = ig.isMock() ? 'mock' : 'real';
+  const prev = await getKv<string>('mode');
+  if (prev !== mode) {
+    if (prev) for (const t of ['posts', 'comments', 'events', 'bidders']) await q(`DELETE FROM ${t}`);
+    await setKv('mode', mode);
+    force = true;
+  }
   const last = await getKv<number>('mediaSyncedAt');
   if (!force && last && Date.now() - last < 5 * MIN) return;
   await setKv('mediaSyncedAt', Date.now());
