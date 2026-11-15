@@ -13,7 +13,11 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-text-size-adjust: 100%; }
-main { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
+/* Jarak aman untuk status bar dan sudut layar iPhone. */
+main {
+  max-width: 720px; margin: 0 auto;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(64px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+}
 h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
 h2 { font-size: 14px; margin: 20px 0 8px; }
 p { margin: 0; }
