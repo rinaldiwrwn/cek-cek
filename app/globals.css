@@ -79,7 +79,7 @@ input[type='number'], input[type='password'], input[type='datetime-local'] { wid
 .amount { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
 .amount strong { font-variant-numeric: tabular-nums; }
 .invalid .amount strong { text-decoration: line-through; }
-.decide { display: flex; gap: 4px; }
+.decide { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 132px; }
 .decide button { min-height: 32px; padding: 3px 9px; font-size: 12.5px; }
 .decide .on.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
 .decide .on.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }

@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     if (b.type === 'post') await updatePost(String(b.id), b.patch || {});
-    else if (b.type === 'override') await setOverride(String(b.id), ['valid', 'invalid'].includes(b.value) ? b.value : null);
+    else if (b.type === 'override') await setOverride(String(b.id), ['valid', 'invalid', 'wrong'].includes(b.value) ? b.value : null);
     else if (b.type === 'send' && (b.kind === 'sniper' || b.kind === 'close')) await sendNow(String(b.id), b.kind);
     else if (b.type === 'verify' && typeof b.username === 'string') await setVerified(b.username, !!b.on);
     else if (b.type === 'sequence') await setSequence(Number(b.startAt), 5);

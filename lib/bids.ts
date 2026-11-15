@@ -9,7 +9,7 @@ export type CommentIn = {
   text: string;
   ts: number;
   deleted: boolean;
-  override: 'valid' | 'invalid' | null;
+  override: 'valid' | 'invalid' | 'wrong' | null; // sah, tolak, salah bid
 };
 
 export type Rules = {

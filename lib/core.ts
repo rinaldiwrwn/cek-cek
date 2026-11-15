@@ -275,10 +275,10 @@ export async function setVerified(username: string, on: boolean) {
   else await q('DELETE FROM bidders WHERE username = $1', [username]);
 }
 
-export async function setOverride(commentId: string, value: 'valid' | 'invalid' | null) {
+export async function setOverride(commentId: string, value: 'valid' | 'invalid' | 'wrong' | null) {
   const r = await q('UPDATE comments SET override = $2 WHERE id = $1 RETURNING username', [commentId, value]);
-  // Sah memasukkan akun ke daftar akun sah, Tolak mengeluarkannya.
-  if (value && r.length) await setVerified(r[0].username, value === 'valid');
+  // Sah memasukkan akun ke daftar akun sah, Tolak mengeluarkannya. "Salah bid" hanya membatalkan bid ini.
+  if (r.length && (value === 'valid' || value === 'invalid')) await setVerified(r[0].username, value === 'valid');
 }
 
 export async function getState() {

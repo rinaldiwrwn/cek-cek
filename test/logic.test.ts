@@ -93,6 +93,7 @@ test('keputusan manual dan bid dihapus', () => {
       c(3, 'c', '+50', 3400), // 200: bid yang terhapus tetap dihitung, hanya ditandai
       c(4, 'd', '500', 3300, { override: 'valid' }), // lewat max jump tapi disahkan manual
       c(5, 'e', '+50', 3200, { override: 'invalid' }),
+      c(6, 'f', '+50', 3100, { override: 'wrong' }),
     ],
     rules,
   );
@@ -102,5 +103,6 @@ test('keputusan manual dan bid dihapus', () => {
   assert.equal(rows[2].amount, 200);
   assert.equal(rows[3].valid, true);
   assert.equal(rows[4].amount, 550);
+  assert.equal(rows[5].valid, false);
   assert.equal(top?.id, '4');
 });

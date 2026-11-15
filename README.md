@@ -12,7 +12,7 @@ otomatis "Sniper Zone" (5 menit sebelum close) serta "Close" (detik ke-59 sebelu
   Tombol **Sah** / **Tolak** menentukan keputusan akhir, dan `+50` dihitung dari bid sah tertinggi.
 - Semua komentar disimpan sejak pertama terlihat. Bid yang dihapus tetap dihitung dan diberi tanda "⚠ Terhapus".
 - Menekan **Sah** memasukkan akun ke daftar akun sah: bid berikutnya dari akun itu, di lelang mana pun, langsung
-  bertanda "✓ Akun sah". Akun keluar dari daftar kalau kamu menekan **Tolak**, kalau ia menghapus bid, atau kalau
+  bertanda "✓ Akun sah". **Salah bid** membatalkan satu bid tanpa mengubah daftar. Akun keluar dari daftar kalau kamu menekan **Tolak**, kalau ia menghapus bid, atau kalau
   kamu mengetuk tanda "✓ Akun sah". Bid dari akun di luar daftar bertanda "Belum dicek".
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
 - Komentar otomatis **mati secara bawaan**. Nyalakan per postingan atau lewat "Aktifkan semua auto-komentar".
