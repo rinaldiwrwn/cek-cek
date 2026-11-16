@@ -73,9 +73,17 @@ async function account(): Promise<Account> {
   const errors: string[] = [];
 
   if (userId) {
-    const base = forced || FB_HOST;
-    const j = await request(`${base}${ver()}/${userId}?fields=username`);
-    found = { base, id: userId, username: j.username };
+    // Token system user ("EAA…") dilayani graph.facebook.com; token Instagram ("IGAA…") oleh graph.instagram.com.
+    for (const base of forced ? [forced] : [FB_HOST, IG_HOST]) {
+      try {
+        const id = base.includes('instagram') ? 'me' : userId;
+        const j = await request(`${base}${ver()}/${id}?fields=username`);
+        found = { base, id, username: j.username };
+        break;
+      } catch (e) {
+        errors.push(String((e as Error).message));
+      }
+    }
   } else {
     if (!forced || forced.includes('instagram')) {
       try {
