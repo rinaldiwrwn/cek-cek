@@ -397,7 +397,7 @@ function Detail({ p, act }: { p: Post; act: (b: unknown) => Promise<void> }) {
 }
 
 function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Promise<void> }) {
-  const set = (value: 'valid' | 'invalid' | 'wrong') => act({ type: 'override', id: r.id, value: r.override === value ? null : value });
+  const set = (value: 'valid' | 'invalid') => act({ type: 'override', id: r.id, value: r.override === value ? null : value });
   return (
     <li className={`${r.isBid ? (r.valid ? 'valid' : 'invalid') : 'chat'}${top ? ' leader' : ''}`}>
       <span className="when">{time(r.ts)}</span>
@@ -417,7 +417,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
         <span className="text">{r.text}</span>
         {r.isBid && (r.flags.length > 0 || r.override || !r.verified) && (
           <span className="flags">
-            {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : r.override === 'wrong' ? 'Salah bid' : 'Ditolak'}</span>}
+            {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : 'Ditolak'}</span>}
             {!r.override && !r.verified && <span className="flag soft">Belum dicek</span>}
             {r.flags.map((f) => <span key={f} className={`flag${SOFT.includes(f) ? ' soft' : ''}`}>{FLAGS[f]}</span>)}
           </span>
@@ -428,8 +428,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           <strong>{rb(r.amount)}</strong>
           <span className="decide">
             <button className={r.override === 'valid' ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid'}>✅</button>
-            <button className={r.override === 'invalid' ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid tidak dihitung, akun keluar dari daftar akun sah" aria-pressed={r.override === 'invalid'}>❌</button>
-            <button className={r.override === 'wrong' ? 'on bad' : ''} onClick={() => set('wrong')} aria-label="Salah bid" title="Salah bid: bid tidak dihitung, akun tetap di daftar akun sah" aria-pressed={r.override === 'wrong'}>😂</button>
+            <button className={r.override === 'invalid' || r.override === 'wrong' ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid ini tidak dihitung" aria-pressed={r.override === 'invalid'}>❌</button>
           </span>
         </span>
       )}

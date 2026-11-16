@@ -11,10 +11,10 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
 - Penanda (terlambat, belum pernah bid di sniper zone, bukan kelipatan, dsb.) hanya saran.
   Tombol **Sah** / **Tolak** menentukan keputusan akhir, dan `+50` dihitung dari bid sah tertinggi.
 - Semua komentar disimpan sejak pertama terlihat. Bid yang dihapus tetap dihitung dan diberi tanda "⚠ Terhapus".
-- Tiap bid punya tiga tombol: ✅ Sah, ❌ Tolak, 😂 Salah bid.
+- Tiap bid punya dua tombol: ✅ Sah dan ❌ Tolak.
 - Menekan **Sah** memasukkan akun ke daftar akun sah: bid berikutnya dari akun itu, di lelang mana pun, langsung
-  bertanda "✓ Akun sah". **Salah bid** membatalkan satu bid tanpa mengubah daftar. Akun keluar dari daftar kalau kamu menekan **Tolak**, kalau ia menghapus bid, atau kalau
-  kamu mengetuk tanda "✓ Akun sah". Bid dari akun di luar daftar bertanda "Belum dicek".
+  bertanda "✓ Akun sah". **Tolak** hanya membatalkan bid itu dan tidak mengubah daftar. Akun keluar dari daftar kalau
+  ia menghapus bid, atau kalau kamu mengeluarkannya lewat panel Akun sah. Bid dari akun di luar daftar bertanda "Belum dicek".
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
 - Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
