@@ -98,6 +98,20 @@ test('penilaian bid', () => {
   assert.equal(top?.amount, 250);
 });
 
+test('Sniper Zone tidak aktif kalau bid sah kurang dari 2', () => {
+  // Hanya 1 bid sah sebelum sniper zone: aturan sniper tidak berlaku, bid dari akun baru tetap masuk.
+  const sepi = evaluate([c(1, 'a', '100', 3600), c(2, 'z', '+50', 100)], rules);
+  assert.deepEqual(sepi.rows[1].flags, []);
+  assert.equal(sepi.rows[1].valid, true);
+  // 2 bid sah sebelum sniper zone: aktif, akun baru ditandai.
+  const ramai = evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000), c(3, 'z', '+50', 100)], rules);
+  assert.deepEqual(ramai.rows[2].flags, ['sniper']);
+  assert.equal(ramai.rows[2].valid, false);
+  // Bid yang kamu tolak tidak dihitung untuk mengaktifkan Sniper Zone.
+  const tolak = evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, { override: 'invalid' }), c(3, 'z', '+50', 100)], rules);
+  assert.deepEqual(tolak.rows[2].flags, []);
+});
+
 test('keputusan manual dan bid dihapus', () => {
   const { rows, top } = evaluate(
     [

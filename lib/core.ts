@@ -236,7 +236,7 @@ async function countValidBids(postId: string) {
   const p = post[0];
   const { rows } = evaluate(
     comments.map((c) => ({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override })),
-    { openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt: toMs(p.close_at), ownUsername: me?.username || null },
+    { openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt: toMs(p.close_at), ownUsername: me?.username || null, sniperMinBids: SNIPER_MIN_BIDS },
   );
   return rows.filter((r) => r.isBid && r.valid).length;
 }
@@ -409,7 +409,7 @@ export async function getState() {
     posts: posts.map((p) => {
       const closeAt = toMs(p.close_at);
       const { rows, top } = evaluate(byPost.get(p.id) || [], {
-        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null, verified,
+        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null, sniperMinBids: SNIPER_MIN_BIDS, verified,
       });
       const ev: Record<string, unknown> = {};
       for (const e of events) {

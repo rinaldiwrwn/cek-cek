@@ -20,6 +20,7 @@ export type Rules = {
   closeAt: number | null;
   ownUsername: string | null;
   verified?: Set<string>; // daftar akun sah
+  sniperMinBids?: number; // Sniper Zone baru aktif kalau bid sah sebelum zona ini minimal sebanyak ini (bawaan 2)
 };
 
 export type Flag =
@@ -48,6 +49,8 @@ const byTime = (a: CommentIn, b: CommentIn) =>
 export function evaluate(comments: CommentIn[], r: Rules) {
   const rows: BidRow[] = [];
   const eligible = new Set<string>(); // punya bid sah sebelum sniper zone
+  let validBefore = 0; // jumlah bid sah sebelum sniper zone dimulai
+  const minBids = r.sniperMinBids ?? 2;
   const sniperStart = r.closeAt != null ? r.closeAt - SNIPER_MS : null;
   let top: BidRow | null = null;
 
@@ -64,7 +67,8 @@ export function evaluate(comments: CommentIn[], r: Rules) {
 
     if (c.deleted) flags.push('dihapus');
     if (r.closeAt != null && c.ts > r.closeAt) flags.push('terlambat');
-    else if (sniperStart != null && c.ts >= sniperStart && !eligible.has(c.username)) flags.push('sniper');
+    // Aturan sniper (hanya yang sudah bid boleh bid) berlaku hanya kalau Sniper Zone aktif, yaitu bid sah cukup banyak.
+    else if (sniperStart != null && c.ts >= sniperStart && validBefore >= minBids && !eligible.has(c.username)) flags.push('sniper');
     if (amount == null) flags.push('tanpaAcuan');
     else {
       if (r.openBid != null && amount < r.openBid) flags.push('bawahOb');
@@ -83,7 +87,10 @@ export function evaluate(comments: CommentIn[], r: Rules) {
 
     if (valid) {
       if (!top || amount! > top.amount!) top = row;
-      if (sniperStart == null || c.ts < sniperStart) eligible.add(c.username);
+      if (sniperStart == null || c.ts < sniperStart) {
+        eligible.add(c.username);
+        validBefore++;
+      }
     }
   }
   return { rows, top };
