@@ -652,6 +652,14 @@ function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown
 }
 
 function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Promise<void> }) {
+  // Membalas komentar bidder di Instagram. Teksnya bisa diedit dulu; OK berarti terkirim.
+  const reply = async () => {
+    const thread = r.parentId ? `@${r.username} ` : '';
+    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):`, `${thread}bid ${rb(r.amount)} sah yaa`);
+    if (!text || !text.trim()) return;
+    if (r.repliedAt && !confirm('Komentar ini sudah pernah kamu balas. Kirim balasan lagi?')) return;
+    await act({ type: 'reply', id: r.id, text: text.trim(), again: !!r.repliedAt });
+  };
   const set = (value: 'valid' | 'invalid') => act({ type: 'override', id: r.id, value: r.override === value ? null : value });
   return (
     <li className={`${r.isBid ? (r.valid ? 'valid' : 'invalid') : 'chat'}${top ? ' leader' : ''}`}>
@@ -670,6 +678,11 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           )}
         </span>
         <span className="text">{r.text}</span>
+        {r.isBid && r.valid && !r.own && !r.deleted && (
+          <button className="mini replybtn" onClick={reply} title="Kirim balasan ke komentar ini di Instagram">
+            {r.repliedAt ? '✓ Sudah dibalas' : '💬 Balas sah'}
+          </button>
+        )}
         {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved) && (
           <span className="flags">
             {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : 'Ditolak'}</span>}

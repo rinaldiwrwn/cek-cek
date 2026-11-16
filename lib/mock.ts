@@ -67,6 +67,18 @@ export function listComments(mediaId: string): IgComment[] {
   return [...list];
 }
 
+export function postReply(commentId: string, message: string): string {
+  const s = store();
+  const id = String(s.seq++);
+  for (const list of Object.values(s.comments)) {
+    if (list.some((c) => c.id === commentId)) {
+      list.push({ id, parentId: commentId, username: me.username, text: message, ts: Math.floor(Date.now() / 1000) * 1000 });
+      return id;
+    }
+  }
+  throw new Error('Instagram: komentar tidak ditemukan');
+}
+
 export function postComment(mediaId: string, message: string): string {
   const s = store();
   const id = String(s.seq++);

@@ -27,6 +27,9 @@ const SCHEMA = [
   // auto: hasil lelang yang ditetapkan sistem (bukan keputusanmu). source: asal akun sah, 'manual' atau 'import'.
   `ALTER TABLE results ADD COLUMN IF NOT EXISTS auto boolean NOT NULL DEFAULT false`,
   `ALTER TABLE bidders ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual'`,
+  // Balasan yang kamu kirim ke komentar bidder dari dashboard.
+  `ALTER TABLE comments ADD COLUMN IF NOT EXISTS replied_at timestamptz`,
+  `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_text text`,
 ];
 
 async function connect(): Promise<Run> {

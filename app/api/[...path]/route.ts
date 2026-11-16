@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { getState, importVerified, listVerified, refresh, removeImported, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
+import { getState, importVerified, listVerified, refresh, removeImported, replyToBid, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -31,6 +31,7 @@ async function action(req: Request) {
     else if (b.type === 'override') await setOverride(String(b.id), ['valid', 'invalid', 'wrong'].includes(b.value) ? b.value : null);
     else if (b.type === 'send' && ['ten', 'sniper', 'close'].includes(b.kind)) await sendNow(String(b.id), b.kind);
     else if (b.type === 'reset' && ['ten', 'sniper', 'close'].includes(b.kind)) await resetEvent(String(b.id), b.kind);
+    else if (b.type === 'reply') await replyToBid(String(b.id), String(b.text), !!b.again);
     else if (b.type === 'verify' && typeof b.username === 'string') await setVerified(b.username, !!b.on);
     else if (b.type === 'import' && Array.isArray(b.usernames)) {
       const r = await importVerified(b.usernames);

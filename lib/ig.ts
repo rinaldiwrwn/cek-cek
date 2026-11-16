@@ -165,6 +165,17 @@ export async function listComments(mediaId: string): Promise<IgComment[]> {
   return out;
 }
 
+/** Membalas sebuah komentar (harus komentar tingkat atas; balasan atas balasan tidak didukung Instagram). */
+export async function postReply(commentId: string, message: string): Promise<string> {
+  if (isMock()) return mock.postReply(commentId, message);
+  const j = await call(`/${commentId}/replies`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ message }),
+  });
+  return String(j.id);
+}
+
 export async function postComment(mediaId: string, message: string): Promise<string> {
   if (isMock()) return mock.postComment(mediaId, message);
   const j = await call(`/${mediaId}/comments`, {

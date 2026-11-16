@@ -11,6 +11,7 @@ export type CommentIn = {
   deleted: boolean;
   deletedAt?: number | null;
   override: 'valid' | 'invalid' | 'wrong' | null; // sah, tolak, salah bid
+  repliedAt?: number | null; // kapan kamu membalas komentar ini dari dashboard
 };
 
 export type Rules = {

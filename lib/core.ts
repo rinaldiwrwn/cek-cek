@@ -408,6 +408,30 @@ export async function syncAutoResults() {
   }
 }
 
+/**
+ * Membalas komentar bidder di Instagram (mis. "bid 250rb sah yaa"). Balasan ke sebuah balasan dikirim ke
+ * komentar induknya, karena Instagram hanya menerima balasan ke komentar tingkat atas.
+ */
+export async function replyToBid(commentId: string, text: string, again = false) {
+  const message = String(text || '').trim();
+  if (!message || message.length > 300) throw new Error('Balasan harus 1 sampai 300 karakter');
+  const c = (await q('SELECT * FROM comments WHERE id = $1', [commentId]))[0];
+  if (!c) throw new Error('Komentar tidak ditemukan');
+  if (c.deleted_at) throw new Error('Komentar ini sudah dihapus di Instagram');
+  // Ditandai dulu supaya dua ketukan beruntun tidak mengirim dua balasan.
+  const claim = await q(
+    `UPDATE comments SET replied_at = $2, reply_text = $3 WHERE id = $1 AND ($4::boolean OR replied_at IS NULL) RETURNING id`,
+    [commentId, iso(Date.now()), message, again],
+  );
+  if (!claim.length) throw new Error('Komentar ini sudah kamu balas');
+  try {
+    await ig.postReply(c.parent_id || c.id, message);
+  } catch (e) {
+    await q('UPDATE comments SET replied_at = $2, reply_text = $3 WHERE id = $1', [commentId, c.replied_at, c.reply_text]);
+    throw e;
+  }
+}
+
 /** Menetapkan hasil lelang: pemenang (akun + nominal), "No Winner", atau null untuk membatalkan penetapan. */
 export async function setResult(postId: string, r: { status: 'winner' | 'none'; username?: string; amount?: number; note?: string } | null) {
   if (!r) {
@@ -449,7 +473,7 @@ export async function getState() {
   const byPost = new Map<string, CommentIn[]>();
   for (const c of comments) {
     const list = byPost.get(c.post_id) || [];
-    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, deletedAt: toMs(c.deleted_at), override: c.override });
+    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, deletedAt: toMs(c.deleted_at), override: c.override, repliedAt: toMs(c.replied_at) });
     byPost.set(c.post_id, list);
   }
 
