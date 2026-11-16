@@ -22,11 +22,14 @@ const SCHEMA = [
   // Hasil lelang yang kamu tetapkan. Judul dan jam close disalin supaya rekap tetap utuh setelah postingannya lama.
   `CREATE TABLE IF NOT EXISTS results (
      post_id text PRIMARY KEY, status text NOT NULL, username text, amount integer,
-     title text, close_at timestamptz, decided_at timestamptz NOT NULL)`,
+     title text, close_at timestamptz, decided_at timestamptz NOT NULL, note text)`,
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS note text`,
 ];
 
 async function connect(): Promise<Run> {
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  // Mode demo selalu memakai database sementara di memori, supaya data palsu tidak pernah
+  // menyentuh (atau menghapus) database asli walaupun DATABASE_URL terisi.
+  const url = process.env.IG_MOCK === '1' ? undefined : process.env.DATABASE_URL || process.env.POSTGRES_URL;
   let run: Run;
   if (url) {
     const { neon } = await import('@neondatabase/serverless');

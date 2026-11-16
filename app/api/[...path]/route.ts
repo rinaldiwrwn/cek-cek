@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { getState, refresh, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncMedia, tick, updatePost } from '@/lib/core';
+import { getState, importVerified, listVerified, refresh, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -32,9 +32,10 @@ async function action(req: Request) {
     else if (b.type === 'send' && ['ten', 'sniper', 'close'].includes(b.kind)) await sendNow(String(b.id), b.kind);
     else if (b.type === 'reset' && ['ten', 'sniper', 'close'].includes(b.kind)) await resetEvent(String(b.id), b.kind);
     else if (b.type === 'verify' && typeof b.username === 'string') await setVerified(b.username, !!b.on);
+    else if (b.type === 'import' && Array.isArray(b.usernames)) return json({ ok: true, ...(await importVerified(b.usernames)) });
     else if (b.type === 'sequence') await setSequence(Number(b.startAt), 5);
     else if (b.type === 'result') {
-      await setResult(String(b.id), b.status === 'winner' || b.status === 'none' ? { status: b.status, username: b.username, amount: Number(b.amount) } : null);
+      await setResult(String(b.id), b.status === 'winner' || b.status === 'none' ? { status: b.status, username: b.username, amount: Number(b.amount), note: b.note } : null);
     } else if (b.type === 'reload') await syncMedia(true);
     else return json({ error: 'Aksi tidak dikenal' }, 400);
     return json({ ok: true });
@@ -58,6 +59,7 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
 
   if (!(await isAuthed())) return denied();
 
+  if (name === 'verified' && !post) return json({ list: await listVerified() });
   if (name === 'state' && !post) {
     try {
       if (isMock()) await refresh(); // demo: pastikan data palsu sudah ada di memori fungsi ini

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
+import { extractUsernames } from '@/lib/parse';
 
 type Post = State['posts'][number];
 type Row = Post['rows'][number];
@@ -94,7 +95,6 @@ export function Dashboard() {
   const [open, setOpen] = useState<string | null>(null);
   const [seq, setSeq] = useState<string | null>(null);
   const [showVerified, setShowVerified] = useState(false);
-  const [newUser, setNewUser] = useState('');
   const [showFeed, setShowFeed] = useState(false);
   const [showWinners, setShowWinners] = useState(false);
   // Batas "sudah dilihat" disimpan di browser ini; aktivitas setelahnya ditandai baru.
@@ -212,7 +212,7 @@ export function Dashboard() {
           Pemenang ({state.results.filter((r) => r.status === 'winner').length})
         </button>
         <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
-          Akun sah ({state.verified.length})
+          Akun sah ({state.verifiedCount})
         </button>
       </div>
 
@@ -241,38 +241,7 @@ export function Dashboard() {
 
       {showWinners && <Winners results={state.results} />}
 
-      {showVerified && (
-        <section className="note verified">
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!newUser.trim()) return;
-              await act({ type: 'verify', username: newUser, on: true });
-              setNewUser('');
-            }}
-          >
-            <label htmlFor="newuser">Tambah akun ke daftar akun sah</label>
-            <span className="addrow">
-              <input id="newuser" type="text" placeholder="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={newUser} onChange={(e) => setNewUser(e.target.value)} />
-              <button className="primary" disabled={!newUser.trim()}>Tambah</button>
-            </span>
-          </form>
-          {!state.verified.length && <p className="muted">Daftar masih kosong. Akun masuk ke sini saat bid-nya kamu sahkan dengan ✅.</p>}
-          <ul className="vlist">
-            {state.verified.map((v) => (
-              <li key={v.username}>
-                <span>
-                  <strong>@{v.username}</strong>
-                  <span className="muted small"> · sejak {dateFmt.format(v.at)}</span>
-                </span>
-                <button className="mini" onClick={() => confirm(`Keluarkan @${v.username} dari daftar akun sah?`) && act({ type: 'verify', username: v.username, on: false })}>
-                  Keluarkan
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {showVerified && <VerifiedPanel count={state.verifiedCount} act={act} />}
 
       {seq != null && (
         <form
@@ -434,48 +403,137 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
 
 type Result = State['results'][number];
 
-/** Penetapan hasil lelang: pemenang dipilih dari pemilik bid sah (usulan: yang tertinggi), atau "No Winner". */
+/** Daftar akun sah: cari, tambah satu, impor dari file followers, dan keluarkan. Daftarnya dimuat saat panel dibuka. */
+function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Promise<void> }) {
+  const [list, setList] = useState<{ username: string; at: number }[] | null>(null);
+  const [find, setFind] = useState('');
+  const [newUser, setNewUser] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = useCallback(() => api('/api/verified').then((j) => setList(j.list)).catch((e) => setMsg(String(e.message))), []);
+  useEffect(() => {
+    load();
+  }, [load, count]);
+
+  const importFile = async (file: File) => {
+    setMsg('Membaca file…');
+    try {
+      const usernames = extractUsernames(await file.text());
+      if (!usernames.length) return setMsg('Tidak ada username yang terbaca dari file itu.');
+      if (!confirm(`Terbaca ${usernames.length.toLocaleString('id-ID')} username dari file.\n\nMasukkan semuanya ke daftar akun sah?`)) return setMsg('');
+      const r = await api('/api/action', { type: 'import', usernames });
+      setMsg(`${r.added.toLocaleString('id-ID')} akun baru ditambahkan (${(r.found - r.added).toLocaleString('id-ID')} sudah ada di daftar).`);
+      load();
+    } catch (e) {
+      setMsg(String((e as Error).message));
+    }
+  };
+
+  const q = find.trim().replace(/^@/, '').toLowerCase();
+  const shown = (list || []).filter((v) => !q || v.username.includes(q));
+  return (
+    <section className="note verified">
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!newUser.trim()) return;
+          await act({ type: 'verify', username: newUser, on: true });
+          setNewUser('');
+          load();
+        }}
+      >
+        <label htmlFor="newuser">Tambah akun ke daftar akun sah</label>
+        <span className="addrow">
+          <input id="newuser" type="text" placeholder="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={newUser} onChange={(e) => setNewUser(e.target.value)} />
+          <button className="primary" disabled={!newUser.trim()}>Tambah</button>
+        </span>
+      </form>
+      <div>
+        <label htmlFor="importfile">Impor dari file followers Instagram (followers_1.json atau .html)</label>
+        <input id="importfile" type="file" accept=".json,.html,.htm,.txt,.csv" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importFile(f); }} />
+      </div>
+      {msg && <p className="small" role="status">{msg}</p>}
+      <div>
+        <label htmlFor="findverified">Cari di daftar ({count.toLocaleString('id-ID')} akun)</label>
+        <input id="findverified" className="textin" type="search" placeholder="ketik sebagian username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={find} onChange={(e) => setFind(e.target.value)} />
+      </div>
+      {list && !list.length && <p className="muted">Daftar masih kosong. Akun masuk ke sini saat bid-nya kamu sahkan dengan ✅.</p>}
+      {!list && <p className="muted">Memuat daftar…</p>}
+      <ul className="vlist">
+        {shown.slice(0, 100).map((v) => (
+          <li key={v.username}>
+            <span>
+              <strong>@{v.username}</strong>
+              <span className="muted small"> · sejak {dateFmt.format(v.at)}</span>
+            </span>
+            <button className="mini" onClick={async () => { if (!confirm(`Keluarkan @${v.username} dari daftar akun sah?`)) return; await act({ type: 'verify', username: v.username, on: false }); load(); }}>
+              Keluarkan
+            </button>
+          </li>
+        ))}
+      </ul>
+      {shown.length > 100 && <p className="muted small">Menampilkan 100 dari {shown.length.toLocaleString('id-ID')} akun. Pakai kolom cari untuk menemukan akun tertentu.</p>}
+    </section>
+  );
+}
+
+/** Penetapan hasil lelang: pemenang dipilih dari pemilik bid sah (usulan: yang tertinggi), atau "No Winner". Bisa diubah kapan saja. */
 function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unknown) => Promise<void> }) {
   // Bid sah tertinggi tiap akun, dari yang terbesar.
   const best = new Map<string, number>();
   for (const r of p.rows) if (r.isBid && r.valid && r.amount != null) best.set(r.username, Math.max(best.get(r.username) ?? 0, r.amount));
   const candidates = [...best].sort((a, b) => b[1] - a[1]);
   const [pick, setPick] = useState('');
-  const chosen = candidates.find(([u]) => u === pick) || candidates[0];
+  const [editing, setEditing] = useState(false);
+  const chosen = candidates.find(([u]) => u === pick) || candidates.find(([u]) => u !== result?.username) || candidates[0];
+  const prev = result?.status === 'winner' ? result.username : null;
+  const save = async (body: Record<string, unknown>) => {
+    await act({ type: 'result', id: p.id, ...body });
+    setEditing(false);
+    setPick('');
+  };
 
-  if (result) {
-    return (
-      <div className="result set">
-        <span>
-          <span className="muted small">Hasil lelang</span>
-          <strong>{result.status === 'winner' ? `🏆 @${result.username} · ${rb(result.amount)}` : 'No Winner'}</strong>
-        </span>
-        <button className="mini" onClick={() => confirm('Batalkan penetapan hasil lelang ini? Kamu bisa menetapkannya lagi setelah itu.') && act({ type: 'result', id: p.id, status: null })}>
-          Ubah
-        </button>
-      </div>
-    );
-  }
-  if (p.closeAt == null || p.closeAt > Date.now()) return null;
-  return (
-    <div className="result">
-      <h2>Tetapkan hasil lelang</h2>
-      {candidates.length > 0 ? (
-        <div className="resultrow">
-          <select aria-label="Pilih pemenang" value={chosen[0]} onChange={(e) => setPick(e.target.value)}>
-            {candidates.map(([u, a], i) => (
-              <option key={u} value={u}>{`@${u} · ${rb(a)}${i === 0 ? ' (bid sah tertinggi)' : ''}`}</option>
-            ))}
-          </select>
-          <button className="primary" onClick={() => confirm(`Tetapkan @${chosen[0]} sebagai pemenang dengan ${rb(chosen[1])}?`) && act({ type: 'result', id: p.id, status: 'winner', username: chosen[0], amount: chosen[1] })}>
-            Tetapkan pemenang
-          </button>
-        </div>
-      ) : (
-        <p className="muted">Belum ada bid sah di lelang ini.</p>
-      )}
-      <button onClick={() => confirm('Tetapkan lelang ini sebagai No Winner?') && act({ type: 'result', id: p.id, status: 'none' })}>No Winner</button>
+  const summary = result && (
+    <div className="result set">
+      <span>
+        <span className="muted small">Hasil lelang</span>
+        <strong>{result.status === 'winner' ? `🏆 @${result.username} · ${rb(result.amount)}` : 'No Winner'}</strong>
+        {result.note && <span className="small">{result.note}</span>}
+      </span>
+      <button className="mini" aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? 'Batal' : 'Ubah'}</button>
     </div>
+  );
+  if (result && !editing) return summary;
+  if (!result && (p.closeAt == null || p.closeAt > Date.now())) return null;
+  return (
+    <>
+      {summary}
+      <div className="result">
+        <h2>{result ? 'Ubah hasil lelang' : 'Tetapkan hasil lelang'}</h2>
+        {candidates.length > 0 ? (
+          <div className="resultrow">
+            <select aria-label="Pilih pemenang" value={chosen[0]} onChange={(e) => setPick(e.target.value)}>
+              {candidates.map(([u, a], i) => (
+                <option key={u} value={u}>{`@${u} · ${rb(a)}${i === 0 ? ' (bid sah tertinggi)' : ''}${u === prev ? ' (pemenang sekarang)' : ''}`}</option>
+              ))}
+            </select>
+            <button className="primary" onClick={() => confirm(`Tetapkan @${chosen[0]} sebagai pemenang dengan ${rb(chosen[1])}?`) && save({ status: 'winner', username: chosen[0], amount: chosen[1], note: prev && prev !== chosen[0] ? `Menggantikan @${prev}` : undefined })}>
+              {result ? 'Ganti pemenang' : 'Tetapkan pemenang'}
+            </button>
+          </div>
+        ) : (
+          <p className="muted">Belum ada bid sah di lelang ini.</p>
+        )}
+        <div className="resultrow">
+          {prev && (
+            <button onClick={() => confirm(`Tetapkan No Winner dan catat @${prev} sebagai Bid & Run?`) && save({ status: 'none', note: `Bid & Run: @${prev}` })}>
+              No Winner · @{prev} Bid &amp; Run
+            </button>
+          )}
+          <button onClick={() => confirm('Tetapkan lelang ini sebagai No Winner?') && save({ status: 'none' })}>No Winner</button>
+          {result && <button onClick={() => confirm('Hapus penetapan hasil lelang ini?') && save({ status: null })}>Hapus penetapan</button>}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -504,7 +562,7 @@ function Winners({ results }: { results: Result[] }) {
                   <td>
                     <ul>
                       {list.map((r) => (
-                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}</span></li>
+                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}{r.note ? ` · ${r.note}` : ''}</span></li>
                       ))}
                     </ul>
                   </td>
@@ -516,7 +574,7 @@ function Winners({ results }: { results: Result[] }) {
       )}
       {none.length > 0 && (
         <p className="small">
-          <strong>No Winner ({none.length}):</strong> <span className="muted">{none.map((r) => r.title).join(' · ')}</span>
+          <strong>No Winner ({none.length}):</strong> <span className="muted">{none.map((r) => `${r.title}${r.note ? ` (${r.note})` : ''}`).join(' · ')}</span>
         </p>
       )}
     </section>

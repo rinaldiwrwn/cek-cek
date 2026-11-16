@@ -59,6 +59,44 @@ export function parseCaption(caption: string): CaptionInfo {
   };
 }
 
+const USERNAME = /^[a-z0-9._]{1,30}$/;
+export const cleanUsername = (raw: string) => {
+  const u = String(raw || '').trim().replace(/^@/, '').toLowerCase();
+  return USERNAME.test(u) ? u : null;
+};
+
+/**
+ * Mengambil username dari file daftar followers hasil "Download your information" Instagram
+ * (JSON atau HTML), atau dari teks biasa berisi satu username per baris.
+ */
+export function extractUsernames(text: string): string[] {
+  const found = new Set<string>();
+  const add = (v: unknown) => {
+    const u = typeof v === 'string' ? cleanUsername(v) : null;
+    if (u) found.add(u);
+  };
+  const fromHref = (h: unknown) => (typeof h === 'string' ? h.match(/instagram\.com\/(?:_u\/)?([A-Za-z0-9._]+)/)?.[1] : undefined);
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {}
+  if (json !== undefined) {
+    const walk = (node: any) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node.string_list_data)) {
+        for (const it of node.string_list_data) add(it?.value ?? fromHref(it?.href) ?? node.title);
+      } else Object.values(node).forEach(walk);
+    };
+    walk(json);
+  } else if (/instagram\.com\//.test(text)) {
+    for (const m of text.matchAll(/instagram\.com\/(?:_u\/)?([A-Za-z0-9._]+)/g)) add(m[1]);
+  } else {
+    for (const part of text.split(/[\s,;]+/)) add(part);
+  }
+  return [...found];
+}
+
 export type ParsedBid = { kind: 'abs' | 'rel' | 'ob'; value: number; sure: boolean };
 
 // Embel-embel yang lazim di komentar bid; tidak membuat bid ditandai "perlu dicek".

@@ -18,6 +18,10 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
 - Tombol **Aktivitas** menampilkan kejadian terbaru (bid dan komentar masuk, bid terhapus, komentar otomatis terkirim
   atau gagal) dan jumlah yang belum kamu lihat di browser itu.
+- Di lelang yang sudah close, **Tetapkan hasil lelang** mencatat pemenang (usulan: bid sah tertinggi) atau **No Winner**.
+  Hasil bisa diubah kapan saja lewat **Ubah**, termasuk mencatat pemenang sebagai Bid & Run. Tombol **Pemenang**
+  menampilkan rekap per akun: total win, total nilai, dan barang yang dimenangkan.
+- Panel Akun sah bisa mengimpor file followers dari "Download your information" Instagram (`followers_1.json` atau `.html`).
 - Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
@@ -30,7 +34,8 @@ npm install
 npm run demo
 ```
 
-Buka http://localhost:3000. Datanya palsu dan tidak ada yang dikirim ke Instagram.
+Buka http://localhost:3000. Datanya palsu, tidak ada yang dikirim ke Instagram, dan mode demo tidak pernah
+memakai database asli walaupun `DATABASE_URL` terisi.
 
 ## Memasang di Vercel
 

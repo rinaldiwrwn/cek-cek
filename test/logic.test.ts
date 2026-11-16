@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBid, parseCaption } from '../lib/parse';
+import { extractUsernames, parseBid, parseCaption } from '../lib/parse';
 import { evaluate, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
@@ -56,6 +56,19 @@ const c = (id: number, username: string, text: string, secBeforeClose: number, e
   id: String(id), parentId: null, username, text, ts: CLOSE - secBeforeClose * 1000, deleted: false, override: null, ...extra,
 });
 const rules = { openBid: 100, increment: 50, maxJump: 300, closeAt: CLOSE, ownUsername: 'lelang' };
+
+test('username dari file followers', () => {
+  const lama = JSON.stringify([
+    { title: '', media_list_data: [], string_list_data: [{ href: 'https://www.instagram.com/budi.watch', value: 'budi.watch', timestamp: 1 }] },
+    { title: '', string_list_data: [{ href: 'https://www.instagram.com/Tono_Jam', value: 'Tono_Jam', timestamp: 2 }] },
+  ]);
+  assert.deepEqual(extractUsernames(lama), ['budi.watch', 'tono_jam']);
+  const baru = JSON.stringify({ relationships_followers: [{ title: 'arloji_sby', string_list_data: [{ href: 'https://www.instagram.com/_u/arloji_sby', timestamp: 3 }] }] });
+  assert.deepEqual(extractUsernames(baru), ['arloji_sby']);
+  const html = '<a target="_blank" href="https://www.instagram.com/kolektor88">kolektor88</a><a href="https://www.instagram.com/dimas_r">dimas_r</a>';
+  assert.deepEqual(extractUsernames(html), ['kolektor88', 'dimas_r']);
+  assert.deepEqual(extractUsernames('@satu\ndua, tiga!\nsatu'), ['satu', 'dua']);
+});
 
 test('penilaian bid', () => {
   const { rows, top } = evaluate(

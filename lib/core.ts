@@ -1,7 +1,7 @@
 // Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
-import { parseBid, parseCaption } from './parse';
+import { cleanUsername, parseBid, parseCaption } from './parse';
 import { evaluate, SNIPER_MS, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -296,14 +296,34 @@ export async function tick(loop: boolean) {
 
 /** Daftar akun sah: akun yang bid-nya pernah kamu sahkan. Berlaku di semua lelang, sekarang dan berikutnya. */
 export async function setVerified(raw: string, on: boolean) {
-  const username = raw.trim().replace(/^@/, '').toLowerCase();
-  if (!/^[a-z0-9._]{1,30}$/.test(username)) throw new Error('Username tidak valid');
+  const username = cleanUsername(raw);
+  if (!username) throw new Error('Username tidak valid');
   if (on) await q('INSERT INTO bidders (username, verified_at) VALUES ($1, $2) ON CONFLICT DO NOTHING', [username, iso(Date.now())]);
   else await q('DELETE FROM bidders WHERE username = $1', [username]);
 }
 
+/** Memasukkan banyak akun sekaligus ke daftar akun sah (mis. dari file followers). */
+export async function importVerified(raw: unknown[]) {
+  const names = [...new Set(raw.map((r) => cleanUsername(String(r))).filter((u): u is string => !!u))].slice(0, 50_000);
+  let added = 0;
+  for (let i = 0; i < names.length; i += 500) {
+    const r = await q(
+      `INSERT INTO bidders (username, verified_at)
+       SELECT jsonb_array_elements_text($1::jsonb), $2::timestamptz ON CONFLICT DO NOTHING RETURNING username`,
+      [JSON.stringify(names.slice(i, i + 500)), iso(Date.now())],
+    );
+    added += r.length;
+  }
+  return { found: names.length, added };
+}
+
+export async function listVerified() {
+  const r = await q('SELECT username, verified_at FROM bidders ORDER BY username');
+  return r.map((b) => ({ username: b.username as string, at: toMs(b.verified_at)! }));
+}
+
 /** Menetapkan hasil lelang: pemenang (akun + nominal), "No Winner", atau null untuk membatalkan penetapan. */
-export async function setResult(postId: string, r: { status: 'winner' | 'none'; username?: string; amount?: number } | null) {
+export async function setResult(postId: string, r: { status: 'winner' | 'none'; username?: string; amount?: number; note?: string } | null) {
   if (!r) {
     await q('DELETE FROM results WHERE post_id = $1', [postId]);
     return;
@@ -313,9 +333,9 @@ export async function setResult(postId: string, r: { status: 'winner' | 'none'; 
   const win = r.status === 'winner';
   if (win && (!r.username || !Number.isFinite(r.amount))) throw new Error('Pemenang tidak lengkap');
   await q(
-    `INSERT INTO results (post_id, status, username, amount, title, close_at, decided_at) VALUES ($1,$2,$3,$4,$5,$6,$7)
-     ON CONFLICT (post_id) DO UPDATE SET status=$2, username=$3, amount=$4, title=$5, close_at=$6, decided_at=$7`,
-    [postId, win ? 'winner' : 'none', win ? r.username : null, win ? Math.round(r.amount!) : null, post.title, post.close_at, iso(Date.now())],
+    `INSERT INTO results (post_id, status, username, amount, title, close_at, decided_at, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (post_id) DO UPDATE SET status=$2, username=$3, amount=$4, title=$5, close_at=$6, decided_at=$7, note=$8`,
+    [postId, win ? 'winner' : 'none', win ? r.username : null, win ? Math.round(r.amount!) : null, post.title, post.close_at, iso(Date.now()), r.note ? String(r.note).slice(0, 200) : null],
   );
 }
 
@@ -330,7 +350,7 @@ export async function getState() {
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT * FROM events'),
-    q('SELECT username, verified_at FROM bidders ORDER BY username'),
+    q('SELECT username FROM bidders'),
     q('SELECT * FROM results ORDER BY close_at DESC NULLS LAST'),
     getKv<{ username: string }>('me'),
     getKv<{ message: string; at: number }>('lastError'),
@@ -352,10 +372,10 @@ export async function getState() {
     me: me?.username || null,
     lastError: lastError && (!lastOk || lastError.at > lastOk) ? lastError : null,
     texts: texts(),
-    verified: bidders.map((b) => ({ username: b.username as string, at: toMs(b.verified_at)! })),
+    verifiedCount: bidders.length,
     results: results.map((r) => ({
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,
-      amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at),
+      amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null,
     })),
     posts: posts.map((p) => {
       const closeAt = toMs(p.close_at);
