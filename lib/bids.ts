@@ -29,7 +29,8 @@ export type Flag =
   | 'maxJump' | 'dihapus' | 'tanpaAcuan' | 'cek' | 'balasan';
 
 // Penanda yang hanya informasi: bid tetap dihitung kecuali kamu menolaknya.
-const SOFT: Flag[] = ['cek', 'balasan', 'dihapus'];
+// Penanda lain (termasuk 'dihapus') membuat bid otomatis tidak sah sampai kamu mengesahkannya manual.
+const SOFT: Flag[] = ['cek', 'balasan'];
 
 export type BidRow = CommentIn & {
   own: boolean;

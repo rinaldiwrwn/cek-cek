@@ -147,7 +147,7 @@ test('keputusan manual dan bid dihapus', () => {
     [
       c(1, 'a', 'ob', 3600),
       c(2, 'b', '150', 3500, { deleted: true }),
-      c(3, 'c', '+50', 3400), // 200: bid yang terhapus tetap dihitung, hanya ditandai
+      c(3, 'c', '+50', 3400), // 150: dihitung dari bid sah sebelumnya (100), bid yang terhapus tidak jadi acuan
       c(4, 'd', '500', 3300, { override: 'valid' }), // lewat max jump tapi disahkan manual
       c(5, 'e', '+50', 3200, { override: 'invalid' }),
       c(6, 'f', '+50', 3100, { override: 'wrong' }),
@@ -155,11 +155,16 @@ test('keputusan manual dan bid dihapus', () => {
     rules,
   );
   assert.equal(rows[0].amount, 100);
-  assert.equal(rows[1].valid, true);
+  assert.equal(rows[1].valid, false); // terhapus: otomatis tidak sah
   assert.deepEqual(rows[1].flags, ['dihapus']);
-  assert.equal(rows[2].amount, 200);
+  assert.equal(rows[2].amount, 150);
   assert.equal(rows[3].valid, true);
   assert.equal(rows[4].amount, 550);
   assert.equal(rows[5].valid, false);
   assert.equal(top?.id, '4');
+
+  // Bid terhapus bisa disahkan kembali secara manual.
+  const kembali = evaluate([c(1, 'a', '100', 3600, { deleted: true, override: 'valid' })], rules);
+  assert.equal(kembali.rows[0].valid, true);
+  assert.equal(kembali.top?.id, '1');
 });

@@ -35,12 +35,12 @@ const FLAGS: Record<string, string> = {
   tidakNaik: 'Tidak lebih tinggi',
   kelipatan: 'Bukan kelipatan',
   maxJump: 'Lewat max jump',
-  dihapus: '⚠ Terhapus',
+  dihapus: '⚠ Terhapus · otomatis tidak sah',
   tanpaAcuan: 'Belum ada bid acuan',
   cek: 'Cek teks',
   balasan: 'Balasan',
 };
-const SOFT = ['cek', 'balasan', 'dihapus'];
+const SOFT = ['cek', 'balasan'];
 
 async function api(path: string, body?: unknown) {
   const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

@@ -1,7 +1,7 @@
 // Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
-import { cleanUsername, parseBid, parseCaption } from './parse';
+import { cleanUsername, parseCaption } from './parse';
 import { autoWinnerReason, evaluate, SNIPER_MS, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -163,13 +163,12 @@ async function syncComments(postId: string) {
     );
   }
   // Komentar yang pernah terlihat tapi sekarang hilang ditandai dihapus; salinannya tetap disimpan.
-  const gone = await q(
+  // Bid yang dihapus otomatis tidak sah; akunnya tetap di daftar akun sah sampai kamu sendiri yang mengeluarkannya.
+  await q(
     `UPDATE comments SET deleted_at = $2 WHERE post_id = $1 AND deleted_at IS NULL
-       AND id NOT IN (SELECT jsonb_array_elements_text($3::jsonb)) RETURNING username, text`,
+       AND id NOT IN (SELECT jsonb_array_elements_text($3::jsonb))`,
     [postId, now, JSON.stringify(list.map((c) => c.id))],
   );
-  // Akun yang menghapus bid dikeluarkan dari daftar akun sah.
-  for (const c of gone) if (parseBid(c.text)) await setVerified(c.username, false);
 }
 
 async function syncDuePosts(): Promise<boolean> {
