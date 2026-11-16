@@ -41,6 +41,7 @@ export type BidRow = CommentIn & {
   verified: boolean;
   imported: boolean;
   relative: boolean; // bid ditulis dengan awalan "+" (mis. +50), jadi totalnya hasil hitungan sistem
+  solid: boolean; // sudah pasti: bid ini disahkan, dan kalau berawalan "+", bid acuannya juga sudah pasti (rantai tanpa bid yang belum dicek)
   autoApproved: boolean; // disahkan otomatis: akun ada di daftar akun sah dan bid-nya tidak kena penanda apa pun
   isBid: boolean;
   amount: number | null;
@@ -67,9 +68,10 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
     const p = own ? null : parseBid(c.text);
     if (!p) {
-      rows.push({ ...c, own, verified: false, imported: false, relative: false, autoApproved: false, isBid: false, amount: null, flags: [], valid: false });
+      rows.push({ ...c, own, verified: false, imported: false, relative: false, solid: false, autoApproved: false, isBid: false, amount: null, flags: [], valid: false });
       continue;
     }
+    const ref: BidRow | null = top; // bid acuan untuk bid berawalan "+"
     const current: number | null = top ? top.amount : null;
     const amount = p.kind === 'abs' ? p.value : p.kind === 'ob' ? r.openBid : current != null ? current + p.value : null;
     const flags: Flag[] = [];
@@ -95,7 +97,11 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     // Bid dari akun sah disahkan otomatis, kecuali kena penanda (sama atau lebih rendah dari bid sebelumnya, terhapus,
     // terlambat, di luar kelipatan, dan sebagainya) atau sudah kamu putuskan sendiri.
     const autoApproved = verified && !c.override && flags.length === 0 && valid;
-    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', autoApproved, isBid: true, amount, flags, valid };
+    // Total bid "+" bergantung pada bid acuannya. Kalau acuannya belum dicek, total itu belum pasti: kalau acuannya
+    // nanti kamu tolak, totalnya berubah. Karena itu bid "+" baru dianggap pasti kalau seluruh rantai acuannya pasti.
+    const approved = c.override === 'valid' || autoApproved;
+    const solid = valid && approved && (p.kind !== 'rel' || !!ref?.solid);
+    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', solid, autoApproved, isBid: true, amount, flags, valid };
     rows.push(row);
 
     if (valid) {
@@ -123,12 +129,12 @@ export function autoWinnerReason(top: BidRow | null, source: 'manual' | 'import'
 
 /**
  * Bid yang berhak dibalas otomatis ("bid [total] sah yaa"): berawalan "+", sudah disahkan otomatis (akun sah, tanpa
- * penanda), belum dibalas, dan masuk setelah fitur dinyalakan serta masih baru. Bid lama tidak pernah dibalas.
+ * penanda), totalnya pasti (bid acuannya juga sudah disahkan), belum dibalas, dan masuk setelah fitur dinyalakan serta masih baru. Bid lama tidak pernah dibalas.
  */
 export function autoReplyTargets(rows: BidRow[], o: { since: number; now: number; maxAgeMs: number }) {
   return rows.filter(
     (r) =>
-      r.isBid && r.relative && r.autoApproved && !r.own && !r.deleted && r.amount != null &&
+      r.isBid && r.relative && r.autoApproved && r.solid && !r.own && !r.deleted && r.amount != null &&
       !r.repliedAt && !r.replyFailedAt && r.ts >= o.since && r.ts >= o.now - o.maxAgeMs,
   );
 }

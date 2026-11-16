@@ -151,6 +151,36 @@ test('balasan otomatis hanya untuk bid + yang disahkan otomatis dan masih baru',
   assert.deepEqual(ids, ['2']);
 });
 
+test('total bid + yang bergantung pada bid belum dicek tidak dibalas otomatis', () => {
+  const now = CLOSE - 3_000_000;
+  const opts = { since: now - 2_000_000, now, maxAgeMs: 900_000 };
+  const comments = [
+    c(1, 'b', '100', 3600), // akun sah, angka biasa: pasti
+    c(2, 'u', '+50', 3300), // akun BELUM dicek, +50: total 150 belum pasti
+    c(3, 'a', '+50', 3200), // akun sah, +50: totalnya 200 bergantung pada bid 'u'
+  ];
+  const v = { ...rules, verified: new Set(['a', 'b']) };
+  const before = evaluate(comments, v).rows;
+  assert.equal(before[2].autoApproved, true);
+  assert.equal(before[2].amount, 200);
+  assert.equal(before[2].solid, false); // acuannya belum dicek
+  assert.deepEqual(autoReplyTargets(before, opts).map((r) => r.id), []);
+
+  // 'u' disahkan manual: rantainya pasti, bid 'a' berhak dibalas.
+  const sah = evaluate(comments.map((x) => (x.id === '2' ? { ...x, override: 'valid' as const } : x)), v).rows;
+  assert.equal(sah[1].solid, true);
+  assert.deepEqual(autoReplyTargets(sah, opts).map((r) => r.id), ['3']);
+
+  // 'u' ditolak: total bid 'a' dihitung ulang dari bid 100 menjadi 150, dan rantainya pasti.
+  const tolak = evaluate(comments.map((x) => (x.id === '2' ? { ...x, override: 'invalid' as const } : x)), v).rows;
+  assert.equal(tolak[2].amount, 150);
+  assert.deepEqual(autoReplyTargets(tolak, opts).map((r) => r.id), ['3']);
+
+  // Acuannya angka biasa dari akun yang belum dicek juga membuat totalnya belum pasti.
+  const abs = evaluate([c(1, 'u', '100', 3600), c(2, 'a', '+50', 3300)], v).rows;
+  assert.equal(abs[1].solid, false);
+});
+
 test('pemenang bawaan', () => {
   const top = (extra: Partial<CommentIn> = {}) => evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, extra)], rules).top;
   assert.equal(autoWinnerReason(top(), undefined), null); // belum disahkan dan bukan akun sah

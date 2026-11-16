@@ -37,7 +37,8 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   terkirim). Bid yang sudah dibalas bertanda "✓ Sudah dibalas".
 - **Auto-balas bid +** (mati bawaan): kalau dinyalakan, bid berawalan "+" dari akun sah yang berstatus "Disahkan otomatis"
   langsung dibalas "bid [total] sah yaa". Hanya bid yang masuk setelah dinyalakan dan masih baru (15 menit) yang dibalas,
-  paling banyak 5 balasan per putaran dengan jeda, dan 40 balasan per jam (`AUTO_REPLY_MAX_PER_HOUR`). Balasan yang gagal
+  dan hanya kalau totalnya pasti: bid acuan yang menjadi dasar penjumlahan juga sudah disahkan (kalau acuannya dari akun
+  yang belum dicek, balasan ditahan dan bid-nya bertanda "Total belum pasti"). Paling banyak 5 balasan per putaran dengan jeda, dan 40 balasan per jam (`AUTO_REPLY_MAX_PER_HOUR`). Balasan yang gagal
   tidak dicoba lagi dan bisa dibalas manual. Teksnya bisa diganti lewat `AUTO_REPLY_TEXT` (pakai `{total}`).
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
