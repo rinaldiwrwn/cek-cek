@@ -30,6 +30,9 @@ const SCHEMA = [
   // Balasan yang kamu kirim ke komentar bidder dari dashboard.
   `ALTER TABLE comments ADD COLUMN IF NOT EXISTS replied_at timestamptz`,
   `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_text text`,
+  `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_auto boolean NOT NULL DEFAULT false`,
+  `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_failed_at timestamptz`,
+  `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_error text`,
 ];
 
 async function connect(): Promise<Run> {

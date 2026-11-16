@@ -99,6 +99,7 @@ input[type='number'], input[type='password'], input[type='datetime-local'] { wid
 .flag { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--bad-bg); color: var(--bad); }
 .flag.soft { background: var(--warn-bg); color: var(--warn); }
 .flag.manual { background: var(--line); color: var(--ink); }
+button.on-switch { background: var(--ok-bg); color: var(--ok); border-color: transparent; font-weight: 600; }
 .replybtn { align-self: flex-start; margin-top: 4px; }
 .flag.ok { background: var(--ok-bg); color: var(--ok); }
 .amount { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }

@@ -11,7 +11,10 @@ export type CommentIn = {
   deleted: boolean;
   deletedAt?: number | null;
   override: 'valid' | 'invalid' | 'wrong' | null; // sah, tolak, salah bid
-  repliedAt?: number | null; // kapan kamu membalas komentar ini dari dashboard
+  repliedAt?: number | null; // kapan komentar ini dibalas dari dashboard
+  repliedAuto?: boolean; // balasannya dikirim otomatis oleh sistem
+  replyFailedAt?: number | null; // balasan otomatis gagal; tidak dicoba lagi sampai kamu membalas manual
+  replyError?: string | null;
 };
 
 export type Rules = {
@@ -116,4 +119,16 @@ export function autoWinnerReason(top: BidRow | null, source: 'manual' | 'import'
   if (source === 'manual') return 'Otomatis · akun sah';
   if (source === 'import') return 'Otomatis · akun sah dari impor followers';
   return null;
+}
+
+/**
+ * Bid yang berhak dibalas otomatis ("bid [total] sah yaa"): berawalan "+", sudah disahkan otomatis (akun sah, tanpa
+ * penanda), belum dibalas, dan masuk setelah fitur dinyalakan serta masih baru. Bid lama tidak pernah dibalas.
+ */
+export function autoReplyTargets(rows: BidRow[], o: { since: number; now: number; maxAgeMs: number }) {
+  return rows.filter(
+    (r) =>
+      r.isBid && r.relative && r.autoApproved && !r.own && !r.deleted && r.amount != null &&
+      !r.repliedAt && !r.replyFailedAt && r.ts >= o.since && r.ts >= o.now - o.maxAgeMs,
+  );
 }

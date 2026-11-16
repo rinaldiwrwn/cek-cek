@@ -199,6 +199,16 @@ export function Dashboard() {
           Atur jam close berurutan
         </button>
         <button
+          className={state.autoReply.on ? 'on-switch' : ''}
+          aria-pressed={state.autoReply.on}
+          onClick={() => {
+            if (!state.autoReply.on && !confirm('Nyalakan balasan otomatis?\n\nBid berawalan "+" dari akun sah yang berstatus "Disahkan otomatis" dan masuk SETELAH ini akan langsung dibalas di Instagram dengan "bid [total] sah yaa". Bid yang sudah ada tidak dibalas. Bid dari akun di luar daftar tetap tidak dibalas sampai kamu sahkan.')) return;
+            act({ type: 'autoreply', on: !state.autoReply.on });
+          }}
+        >
+          Auto-balas bid +: {state.autoReply.on ? 'nyala' : 'mati'}
+        </button>
+        <button
           className={fresh ? 'attn' : ''}
           aria-expanded={showFeed}
           onClick={() => {
@@ -298,6 +308,8 @@ function buildFeed(state: State): FeedItem[] {
         add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}` : ''}`, hard.length ? 'warn' : '');
       } else add(`c${r.id}`, r.ts, `@${r.username}: ${r.text}`, 'chat');
       if (r.deleted) add(`d${r.id}`, r.deletedAt, `@${r.username} menghapus ${r.isBid ? `bid ${rb(r.amount)}` : 'komentar'}`, 'bad');
+      if (r.repliedAuto && r.repliedAt) add(`ra${r.id}`, r.repliedAt, `Balasan otomatis terkirim ke @${r.username} (bid ${rb(r.amount)})`, 'ok');
+      if (r.replyFailedAt) add(`rf${r.id}`, r.replyFailedAt, `Balasan otomatis ke @${r.username} GAGAL${r.replyError ? `: ${r.replyError}` : ''}`, 'bad');
     }
     for (const kind of ['ten', 'sniper', 'close'] as Kind[]) {
       const e = p.events[kind];
@@ -680,13 +692,14 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
         <span className="text">{r.text}</span>
         {r.isBid && r.relative && (r.override === 'valid' || r.autoApproved) && !r.own && !r.deleted && (
           <button className="mini replybtn" onClick={reply} title="Kirim balasan ke komentar ini di Instagram">
-            {r.repliedAt ? '✓ Sudah dibalas' : '💬 Balas sah'}
+            {r.repliedAt ? (r.repliedAuto ? '✓ Dibalas otomatis' : '✓ Sudah dibalas') : '💬 Balas sah'}
           </button>
         )}
-        {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved) && (
+        {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved || r.replyFailedAt) && (
           <span className="flags">
             {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : 'Ditolak'}</span>}
             {r.autoApproved && <span className="flag ok">Disahkan otomatis</span>}
+            {r.replyFailedAt && <span className="flag" title={r.replyError || undefined}>Balasan otomatis gagal</span>}
             {!r.override && !r.verified && <span className="flag soft">Belum dicek</span>}
             {r.flags.map((f) => <span key={f} className={`flag${SOFT.includes(f) ? ' soft' : ''}`}>{FLAGS[f]}</span>)}
           </span>
