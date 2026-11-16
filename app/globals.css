@@ -136,3 +136,19 @@ button.attn { border-color: var(--warn); background: var(--warn-bg); color: var(
 .feed li.bad .who > span:first-child { color: var(--bad); font-weight: 600; }
 .feed li.ok .who > span:first-child { color: var(--ok); }
 .feed li.chat .who > span:first-child { color: var(--muted); }
+.won { color: var(--ok); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.result h2 { margin: 0; }
+.result.set { flex-direction: row; justify-content: space-between; align-items: center; background: var(--ok-bg); border-color: transparent; }
+.result.set > span { display: flex; flex-direction: column; }
+.resultrow { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.resultrow select { flex: 1; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; }
+.winners { display: flex; flex-direction: column; gap: 10px; }
+.tablewrap { overflow-x: auto; }
+.winners table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.winners th { text-align: left; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.winners td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.winners .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.winners td ul { margin: 0; padding: 0; list-style: none; min-width: 200px; }
+.textin { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); font-size: 16px; }
+.verified input[type='file'] { width: 100%; font-size: 14px; }

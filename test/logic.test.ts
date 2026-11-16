@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBid, parseCaption } from '../lib/parse';
+import { extractUsernames, parseBid, parseCaption } from '../lib/parse';
 import { evaluate, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
@@ -57,6 +57,19 @@ const c = (id: number, username: string, text: string, secBeforeClose: number, e
 });
 const rules = { openBid: 100, increment: 50, maxJump: 300, closeAt: CLOSE, ownUsername: 'lelang' };
 
+test('username dari file followers', () => {
+  const lama = JSON.stringify([
+    { title: '', media_list_data: [], string_list_data: [{ href: 'https://www.instagram.com/budi.watch', value: 'budi.watch', timestamp: 1 }] },
+    { title: '', string_list_data: [{ href: 'https://www.instagram.com/Tono_Jam', value: 'Tono_Jam', timestamp: 2 }] },
+  ]);
+  assert.deepEqual(extractUsernames(lama), ['budi.watch', 'tono_jam']);
+  const baru = JSON.stringify({ relationships_followers: [{ title: 'arloji_sby', string_list_data: [{ href: 'https://www.instagram.com/_u/arloji_sby', timestamp: 3 }] }] });
+  assert.deepEqual(extractUsernames(baru), ['arloji_sby']);
+  const html = '<a target="_blank" href="https://www.instagram.com/kolektor88">kolektor88</a><a href="https://www.instagram.com/dimas_r">dimas_r</a>';
+  assert.deepEqual(extractUsernames(html), ['kolektor88', 'dimas_r']);
+  assert.deepEqual(extractUsernames('@satu\ndua, tiga!\nsatu'), ['satu', 'dua']);
+});
+
 test('penilaian bid', () => {
   const { rows, top } = evaluate(
     [
@@ -83,6 +96,20 @@ test('penilaian bid', () => {
   assert.deepEqual(by[9].flags, ['terlambat']);
   assert.equal(top?.id, '8');
   assert.equal(top?.amount, 250);
+});
+
+test('Sniper Zone tidak aktif kalau bid sah kurang dari 2', () => {
+  // Hanya 1 bid sah sebelum sniper zone: aturan sniper tidak berlaku, bid dari akun baru tetap masuk.
+  const sepi = evaluate([c(1, 'a', '100', 3600), c(2, 'z', '+50', 100)], rules);
+  assert.deepEqual(sepi.rows[1].flags, []);
+  assert.equal(sepi.rows[1].valid, true);
+  // 2 bid sah sebelum sniper zone: aktif, akun baru ditandai.
+  const ramai = evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000), c(3, 'z', '+50', 100)], rules);
+  assert.deepEqual(ramai.rows[2].flags, ['sniper']);
+  assert.equal(ramai.rows[2].valid, false);
+  // Bid yang kamu tolak tidak dihitung untuk mengaktifkan Sniper Zone.
+  const tolak = evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, { override: 'invalid' }), c(3, 'z', '+50', 100)], rules);
+  assert.deepEqual(tolak.rows[2].flags, []);
 });
 
 test('keputusan manual dan bid dihapus', () => {
