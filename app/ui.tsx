@@ -96,6 +96,7 @@ export function Dashboard() {
   const [showVerified, setShowVerified] = useState(false);
   const [newUser, setNewUser] = useState('');
   const [showFeed, setShowFeed] = useState(false);
+  const [showWinners, setShowWinners] = useState(false);
   // Batas "sudah dilihat" disimpan di browser ini; aktivitas setelahnya ditandai baru.
   const [seen, setSeen] = useState(0);
   useEffect(() => {
@@ -207,6 +208,9 @@ export function Dashboard() {
         >
           Aktivitas{fresh ? ` (${fresh} baru)` : ''}
         </button>
+        <button aria-expanded={showWinners} onClick={() => setShowWinners(!showWinners)}>
+          Pemenang ({state.results.filter((r) => r.status === 'winner').length})
+        </button>
         <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
           Akun sah ({state.verified.length})
         </button>
@@ -234,6 +238,8 @@ export function Dashboard() {
           </ul>
         </section>
       )}
+
+      {showWinners && <Winners results={state.results} />}
 
       {showVerified && (
         <section className="note verified">
@@ -293,13 +299,13 @@ export function Dashboard() {
       {!state.posts.length && <p className="muted pad">Belum ada postingan yang terbaca.</p>}
       <ul className="posts">
         {state.posts.map((p) => (
-          <PostCard key={p.id} p={p} now={now} open={open === p.id} toggle={() => setOpen(open === p.id ? null : p.id)} act={act} />
+          <PostCard key={p.id} p={p} result={state.results.find((r) => r.postId === p.id)} now={now} open={open === p.id} toggle={() => setOpen(open === p.id ? null : p.id)} act={act} />
         ))}
       </ul>
       {state.posts.filter((p) => p.id === open).map((p) => (
         <section key={p.id} className="post detailbox">
           <h2 className="detailtitle">{p.title}</h2>
-          <Detail p={p} act={act} />
+          <Detail p={p} result={state.results.find((r) => r.postId === p.id)} act={act} />
         </section>
       ))}
       {state.posts.length > 0 && !open && <p className="muted small hint">Geser ke samping untuk melihat lelang lain. Ketuk satu lelang untuk melihat bid-nya.</p>}
@@ -390,7 +396,7 @@ function EventSlot({ p, kind, now, act }: { p: Post; kind: Kind; now: number; ac
   );
 }
 
-function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: boolean; toggle: () => void; act: (b: unknown) => Promise<void> }) {
+function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: State['results'][number]; now: number; open: boolean; toggle: () => void; act: (b: unknown) => Promise<void> }) {
   const ph = phase(p, now);
   const bids = p.rows.filter((r) => r.isBid);
   // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
@@ -402,6 +408,7 @@ function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: b
         <span className="info">
           <span className="title">{p.title}</span>
           <span className={`phase ${ph.key}`}>{ph.label}</span>
+          {result && <span className="small won">{result.status === 'winner' ? `🏆 @${result.username} · ${rb(result.amount)}` : 'No Winner'}</span>}
           <span className="muted small">{p.closeAt != null ? `${dateFmt.format(p.closeAt)} · ${time(p.closeAt)}` : 'Atur jam close di detail'}</span>
         </span>
         <span className="top">
@@ -425,7 +432,98 @@ function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: b
   );
 }
 
-function Detail({ p, act }: { p: Post; act: (b: unknown) => Promise<void> }) {
+type Result = State['results'][number];
+
+/** Penetapan hasil lelang: pemenang dipilih dari pemilik bid sah (usulan: yang tertinggi), atau "No Winner". */
+function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unknown) => Promise<void> }) {
+  // Bid sah tertinggi tiap akun, dari yang terbesar.
+  const best = new Map<string, number>();
+  for (const r of p.rows) if (r.isBid && r.valid && r.amount != null) best.set(r.username, Math.max(best.get(r.username) ?? 0, r.amount));
+  const candidates = [...best].sort((a, b) => b[1] - a[1]);
+  const [pick, setPick] = useState('');
+  const chosen = candidates.find(([u]) => u === pick) || candidates[0];
+
+  if (result) {
+    return (
+      <div className="result set">
+        <span>
+          <span className="muted small">Hasil lelang</span>
+          <strong>{result.status === 'winner' ? `🏆 @${result.username} · ${rb(result.amount)}` : 'No Winner'}</strong>
+        </span>
+        <button className="mini" onClick={() => confirm('Batalkan penetapan hasil lelang ini? Kamu bisa menetapkannya lagi setelah itu.') && act({ type: 'result', id: p.id, status: null })}>
+          Ubah
+        </button>
+      </div>
+    );
+  }
+  if (p.closeAt == null || p.closeAt > Date.now()) return null;
+  return (
+    <div className="result">
+      <h2>Tetapkan hasil lelang</h2>
+      {candidates.length > 0 ? (
+        <div className="resultrow">
+          <select aria-label="Pilih pemenang" value={chosen[0]} onChange={(e) => setPick(e.target.value)}>
+            {candidates.map(([u, a], i) => (
+              <option key={u} value={u}>{`@${u} · ${rb(a)}${i === 0 ? ' (bid sah tertinggi)' : ''}`}</option>
+            ))}
+          </select>
+          <button className="primary" onClick={() => confirm(`Tetapkan @${chosen[0]} sebagai pemenang dengan ${rb(chosen[1])}?`) && act({ type: 'result', id: p.id, status: 'winner', username: chosen[0], amount: chosen[1] })}>
+            Tetapkan pemenang
+          </button>
+        </div>
+      ) : (
+        <p className="muted">Belum ada bid sah di lelang ini.</p>
+      )}
+      <button onClick={() => confirm('Tetapkan lelang ini sebagai No Winner?') && act({ type: 'result', id: p.id, status: 'none' })}>No Winner</button>
+    </div>
+  );
+}
+
+/** Rekap pemenang: satu baris per akun, dengan jumlah menang, total nominal, dan barang yang dimenangkan. */
+function Winners({ results }: { results: Result[] }) {
+  const byUser = new Map<string, Result[]>();
+  for (const r of results) if (r.status === 'winner' && r.username) byUser.set(r.username, [...(byUser.get(r.username) || []), r]);
+  const rows = [...byUser].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const none = results.filter((r) => r.status === 'none');
+  return (
+    <section className="note winners">
+      <strong>Rekap pemenang</strong>
+      {!rows.length && <p className="muted">Belum ada pemenang yang ditetapkan. Buka lelang yang sudah close, lalu tekan "Tetapkan pemenang".</p>}
+      {rows.length > 0 && (
+        <div className="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Akun</th><th className="num">Total win</th><th className="num">Total nilai</th><th>Barang yang dimenangkan</th></tr>
+            </thead>
+            <tbody>
+              {rows.map(([u, list]) => (
+                <tr key={u}>
+                  <td><strong>@{u}</strong></td>
+                  <td className="num">{list.length}</td>
+                  <td className="num">{rb(list.reduce((s, r) => s + (r.amount || 0), 0))}</td>
+                  <td>
+                    <ul>
+                      {list.map((r) => (
+                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}</span></li>
+                      ))}
+                    </ul>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {none.length > 0 && (
+        <p className="small">
+          <strong>No Winner ({none.length}):</strong> <span className="muted">{none.map((r) => r.title).join(' · ')}</span>
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown) => Promise<void> }) {
   const [all, setAll] = useState(false);
   const [form, setForm] = useState({ closeAt: toInput(p.closeAt), openBid: p.openBid ?? '', increment: p.increment ?? '', maxJump: p.maxJump ?? '' });
   const rows = p.rows.filter((r) => all || r.isBid);
@@ -450,6 +548,8 @@ function Detail({ p, act }: { p: Post; act: (b: unknown) => Promise<void> }) {
           <BidRow key={r.id} r={r} top={p.top?.ts === r.ts && p.top?.username === r.username && r.valid && r.amount === p.top?.amount} act={act} />
         ))}
       </ul>
+
+      <ResultBox p={p} result={result} act={act} />
 
       <h2>Aturan lelang <span className="muted small">(nominal dalam ribuan)</span></h2>
       <form

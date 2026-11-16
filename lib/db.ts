@@ -19,6 +19,10 @@ const SCHEMA = [
      comment_id text, error text, PRIMARY KEY (post_id, kind))`,
   `CREATE TABLE IF NOT EXISTS kv (key text PRIMARY KEY, value jsonb)`,
   `CREATE TABLE IF NOT EXISTS bidders (username text PRIMARY KEY, verified_at timestamptz NOT NULL)`,
+  // Hasil lelang yang kamu tetapkan. Judul dan jam close disalin supaya rekap tetap utuh setelah postingannya lama.
+  `CREATE TABLE IF NOT EXISTS results (
+     post_id text PRIMARY KEY, status text NOT NULL, username text, amount integer,
+     title text, close_at timestamptz, decided_at timestamptz NOT NULL)`,
 ];
 
 async function connect(): Promise<Run> {
