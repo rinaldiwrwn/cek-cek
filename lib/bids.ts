@@ -20,6 +20,7 @@ export type Rules = {
   closeAt: number | null;
   ownUsername: string | null;
   verified?: Set<string>; // daftar akun sah
+  imported?: Set<string>; // akun sah yang masuk lewat impor followers (belum kamu sahkan sendiri)
   sniperMinBids?: number; // Sniper Zone baru aktif kalau bid sah sebelum zona ini minimal sebanyak ini (bawaan 2)
 };
 
@@ -33,6 +34,7 @@ const SOFT: Flag[] = ['cek', 'balasan', 'dihapus'];
 export type BidRow = CommentIn & {
   own: boolean;
   verified: boolean;
+  imported: boolean;
   isBid: boolean;
   amount: number | null;
   flags: Flag[];
@@ -58,7 +60,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
     const p = own ? null : parseBid(c.text);
     if (!p) {
-      rows.push({ ...c, own, verified: false, isBid: false, amount: null, flags: [], valid: false });
+      rows.push({ ...c, own, verified: false, imported: false, isBid: false, amount: null, flags: [], valid: false });
       continue;
     }
     const current: number | null = top ? top.amount : null;
@@ -82,7 +84,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
 
     const auto = flags.every((f) => SOFT.includes(f));
     const valid = amount != null && (c.override ? c.override === 'valid' : auto);
-    const row: BidRow = { ...c, own, verified: !!r.verified?.has(c.username), isBid: true, amount, flags, valid };
+    const row: BidRow = { ...c, own, verified: !!r.verified?.has(c.username), imported: !!r.imported?.has(c.username), isBid: true, amount, flags, valid };
     rows.push(row);
 
     if (valid) {
@@ -94,4 +96,16 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     }
   }
   return { rows, top };
+}
+
+/**
+ * Pemenang bawaan sebuah lelang yang sudah close: pemilik bid sah tertinggi, asalkan bid itu sudah kamu sahkan
+ * atau akunnya ada di daftar akun sah. Mengembalikan alasannya, atau null kalau belum bisa ditentukan otomatis.
+ */
+export function autoWinnerReason(top: BidRow | null, source: 'manual' | 'import' | undefined): string | null {
+  if (!top || !top.valid || top.amount == null) return null;
+  if (top.override === 'valid') return 'Otomatis · bid sudah disahkan';
+  if (source === 'manual') return 'Otomatis · akun sah';
+  if (source === 'import') return 'Otomatis · akun sah dari impor followers';
+  return null;
 }

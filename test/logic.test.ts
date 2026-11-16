@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractUsernames, parseBid, parseCaption } from '../lib/parse';
-import { evaluate, type CommentIn } from '../lib/bids';
+import { autoWinnerReason, evaluate, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
 Mohon 𝗕𝗔𝗖𝗔 𝗗𝗘𝗦𝗞𝗥𝗜𝗣𝗦𝗜
@@ -110,6 +110,18 @@ test('Sniper Zone tidak aktif kalau bid sah kurang dari 2', () => {
   // Bid yang kamu tolak tidak dihitung untuk mengaktifkan Sniper Zone.
   const tolak = evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, { override: 'invalid' }), c(3, 'z', '+50', 100)], rules);
   assert.deepEqual(tolak.rows[2].flags, []);
+});
+
+test('pemenang bawaan', () => {
+  const top = (extra: Partial<CommentIn> = {}) => evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, extra)], rules).top;
+  assert.equal(autoWinnerReason(top(), undefined), null); // belum disahkan dan bukan akun sah
+  assert.equal(autoWinnerReason(top(), 'manual'), 'Otomatis · akun sah');
+  assert.equal(autoWinnerReason(top(), 'import'), 'Otomatis · akun sah dari impor followers');
+  assert.equal(autoWinnerReason(top({ override: 'valid' }), undefined), 'Otomatis · bid sudah disahkan');
+  // Bid tertinggi ditolak: bid sah tertinggi berpindah ke akun 'a', jadi yang dinilai adalah akun 'a'.
+  assert.equal(top({ override: 'invalid' })?.username, 'a');
+  assert.equal(autoWinnerReason(top({ override: 'invalid' }), undefined), null);
+  assert.equal(autoWinnerReason(null, 'manual'), null);
 });
 
 test('keputusan manual dan bid dihapus', () => {

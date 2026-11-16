@@ -24,6 +24,9 @@ const SCHEMA = [
      post_id text PRIMARY KEY, status text NOT NULL, username text, amount integer,
      title text, close_at timestamptz, decided_at timestamptz NOT NULL, note text)`,
   `ALTER TABLE results ADD COLUMN IF NOT EXISTS note text`,
+  // auto: hasil lelang yang ditetapkan sistem (bukan keputusanmu). source: asal akun sah, 'manual' atau 'import'.
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS auto boolean NOT NULL DEFAULT false`,
+  `ALTER TABLE bidders ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual'`,
 ];
 
 async function connect(): Promise<Run> {

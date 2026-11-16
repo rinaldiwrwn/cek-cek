@@ -407,7 +407,7 @@ type Result = State['results'][number];
 
 /** Daftar akun sah: cari, tambah satu, impor dari file followers, dan keluarkan. Daftarnya dimuat saat panel dibuka. */
 function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Promise<void> }) {
-  const [list, setList] = useState<{ username: string; at: number }[] | null>(null);
+  const [list, setList] = useState<{ username: string; at: number; source: 'manual' | 'import' }[] | null>(null);
   const [find, setFind] = useState('');
   const [newUser, setNewUser] = useState('');
   const [msg, setMsg] = useState('');
@@ -431,6 +431,7 @@ function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Pro
   };
 
   const q = find.trim().replace(/^@/, '').toLowerCase();
+  const importedCount = (list || []).filter((v) => v.source === 'import').length;
   const shown = (list || []).filter((v) => !q || v.username.includes(q));
   return (
     <section className="note verified">
@@ -460,12 +461,25 @@ function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Pro
       </div>
       {list && !list.length && <p className="muted">Daftar masih kosong. Akun masuk ke sini saat bid-nya kamu sahkan dengan ✅.</p>}
       {!list && <p className="muted">Memuat daftar…</p>}
+      {importedCount > 0 && (
+        <button
+          onClick={async () => {
+            if (!confirm(`Keluarkan ${importedCount.toLocaleString('id-ID')} akun hasil impor dari daftar akun sah?\n\nAkun yang kamu sahkan sendiri dengan ✅ atau kamu tambahkan manual tidak ikut dikeluarkan.`)) return;
+            const r = await api('/api/action', { type: 'unimport' }).catch((e) => ({ removed: 0, error: e.message }));
+            setMsg(r.error ? String(r.error) : `${Number(r.removed).toLocaleString('id-ID')} akun hasil impor dikeluarkan.`);
+            await act({ type: 'noop' }).catch(() => {});
+            load();
+          }}
+        >
+          Batalkan impor ({importedCount.toLocaleString('id-ID')} akun)
+        </button>
+      )}
       <ul className="vlist">
         {shown.slice(0, 100).map((v) => (
           <li key={v.username}>
             <span>
               <strong>@{v.username}</strong>
-              <span className="muted small"> · sejak {dateFmt.format(v.at)}</span>
+              <span className="muted small"> · {v.source === 'import' ? 'impor' : 'sah'} sejak {dateFmt.format(v.at)}</span>
             </span>
             <button className="mini" onClick={async () => { if (!confirm(`Keluarkan @${v.username} dari daftar akun sah?`)) return; await act({ type: 'verify', username: v.username, on: false }); load(); }}>
               Keluarkan
@@ -500,6 +514,7 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
         <span className="muted small">Hasil lelang</span>
         <strong>{result.status === 'winner' ? `🏆 @${result.username} · ${rb(result.amount)}` : 'No Winner'}</strong>
         {result.note && <span className="small">{result.note}</span>}
+        {result.auto && <span className="muted small">Ditetapkan sistem. Tekan Ubah kalau perlu diganti.</span>}
       </span>
       <button className="mini" aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? 'Batal' : 'Ubah'}</button>
     </div>
@@ -532,7 +547,7 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
             </button>
           )}
           <button onClick={() => confirm('Tetapkan lelang ini sebagai No Winner?') && save({ status: 'none' })}>No Winner</button>
-          {result && <button onClick={() => confirm('Hapus penetapan hasil lelang ini?') && save({ status: null })}>Hapus penetapan</button>}
+          {result && !result.auto && <button onClick={() => confirm('Kembalikan hasil lelang ini ke otomatis? Keputusan manualmu dihapus, lalu sistem menetapkan pemenang bawaannya lagi kalau syaratnya terpenuhi.') && save({ status: null })}>Kembalikan ke otomatis</button>}
         </div>
       </div>
     </>
@@ -564,7 +579,7 @@ function Winners({ results }: { results: Result[] }) {
                   <td>
                     <ul>
                       {list.map((r) => (
-                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}{r.note ? ` · ${r.note}` : ''}</span></li>
+                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}{r.auto ? ' · otomatis' : r.note ? ` · ${r.note}` : ''}</span></li>
                       ))}
                     </ul>
                   </td>
@@ -647,10 +662,10 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           {r.isBid && r.verified && (
             <button
               className="trusted"
-              title="Akun ini ada di daftar akun sah. Ketuk untuk mengeluarkannya."
+              title={r.imported ? 'Akun ini ada di daftar dari impor followers, belum kamu sahkan sendiri. Ketuk untuk mengeluarkannya.' : 'Akun ini ada di daftar akun sah. Ketuk untuk mengeluarkannya.'}
               onClick={() => confirm(`Keluarkan @${r.username} dari daftar akun sah?`) && act({ type: 'verify', username: r.username, on: false })}
             >
-              ✓ Akun sah
+              ✓ Akun sah{r.imported ? ' (impor)' : ''}
             </button>
           )}
         </span>

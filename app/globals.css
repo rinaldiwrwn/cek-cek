@@ -68,7 +68,7 @@ input[type='number'], input[type='password'], input[type='datetime-local'] { wid
 .summary { all: unset; box-sizing: border-box; display: flex; gap: 12px; width: 100%; padding: 12px; cursor: pointer; align-items: center; }
 .summary img, .thumb { width: 52px; height: 52px; border-radius: 9px; object-fit: cover; background: var(--line); flex: none; }
 .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title { font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .phase { font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .phase.sniper { color: var(--warn); font-weight: 600; }
 .phase.closed { color: var(--bad); font-weight: 600; }
