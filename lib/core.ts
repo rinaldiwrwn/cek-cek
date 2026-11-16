@@ -2,7 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { cleanUsername, parseBid, parseCaption } from './parse';
-import { evaluate, SNIPER_MS, type CommentIn } from './bids';
+import { autoWinnerReason, evaluate, SNIPER_MS, type CommentIn } from './bids';
 
 const MIN = 60_000;
 const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
@@ -318,6 +318,7 @@ export async function tick(loop: boolean) {
     if (!loop || !hot || Date.now() - started > 50_000) break;
     await sleep(4_000);
   }
+  await syncAutoResults().catch(noteError);
   await Promise.all(timers);
 }
 
@@ -327,7 +328,8 @@ export async function tick(loop: boolean) {
 export async function setVerified(raw: string, on: boolean) {
   const username = cleanUsername(raw);
   if (!username) throw new Error('Username tidak valid');
-  if (on) await q('INSERT INTO bidders (username, verified_at) VALUES ($1, $2) ON CONFLICT DO NOTHING', [username, iso(Date.now())]);
+  // Mengesahkan akun hasil impor menjadikannya akun sah "manual" (sudah kamu cek sendiri).
+  if (on) await q("INSERT INTO bidders (username, verified_at, source) VALUES ($1, $2, 'manual') ON CONFLICT (username) DO UPDATE SET source = 'manual'", [username, iso(Date.now())]);
   else await q('DELETE FROM bidders WHERE username = $1', [username]);
 }
 
@@ -337,8 +339,8 @@ export async function importVerified(raw: unknown[]) {
   let added = 0;
   for (let i = 0; i < names.length; i += 500) {
     const r = await q(
-      `INSERT INTO bidders (username, verified_at)
-       SELECT jsonb_array_elements_text($1::jsonb), $2::timestamptz ON CONFLICT DO NOTHING RETURNING username`,
+      `INSERT INTO bidders (username, verified_at, source)
+       SELECT jsonb_array_elements_text($1::jsonb), $2::timestamptz, 'import' ON CONFLICT DO NOTHING RETURNING username`,
       [JSON.stringify(names.slice(i, i + 500)), iso(Date.now())],
     );
     added += r.length;
@@ -346,9 +348,65 @@ export async function importVerified(raw: unknown[]) {
   return { found: names.length, added };
 }
 
+/** Mengeluarkan semua akun hasil impor followers; akun yang kamu sahkan sendiri tidak ikut. */
+export async function removeImported() {
+  const r = await q("DELETE FROM bidders WHERE source = 'import' RETURNING username");
+  return r.length;
+}
+
 export async function listVerified() {
-  const r = await q('SELECT username, verified_at FROM bidders ORDER BY username');
-  return r.map((b) => ({ username: b.username as string, at: toMs(b.verified_at)! }));
+  const r = await q('SELECT username, verified_at, source FROM bidders ORDER BY username');
+  return r.map((b) => ({ username: b.username as string, at: toMs(b.verified_at)!, source: b.source as 'manual' | 'import' }));
+}
+
+const AUTO_WINDOW = 48 * 60 * MIN; // lelang yang close lebih lama dari ini tidak lagi ditetapkan otomatis
+const AUTO_GRACE = 30_000; // beri waktu komentar menit-menit terakhir yang telat terbaca
+
+/**
+ * Menetapkan pemenang bawaan untuk lelang yang sudah close: bid sah tertinggi, kalau bid itu sudah kamu sahkan
+ * atau akunnya ada di daftar akun sah. Hasil otomatis ikut berubah kalau keputusanmu berubah; hasil yang
+ * kamu tetapkan sendiri tidak pernah disentuh.
+ */
+export async function syncAutoResults() {
+  const now = Date.now();
+  const posts = await q(`SELECT * FROM posts WHERE close_at IS NOT NULL AND close_at < $1 AND close_at > $2`, [iso(now - AUTO_GRACE), iso(now - AUTO_WINDOW)]);
+  if (!posts.length) return;
+  const ids = JSON.stringify(posts.map((p) => p.id));
+  const [comments, results, me] = await Promise.all([
+    q(`SELECT * FROM comments WHERE post_id IN (SELECT jsonb_array_elements_text($1::jsonb))`, [ids]),
+    q(`SELECT * FROM results WHERE post_id IN (SELECT jsonb_array_elements_text($1::jsonb))`, [ids]),
+    getKv<{ username: string }>('me'),
+  ]);
+  const names = JSON.stringify([...new Set(comments.map((c) => c.username as string))]);
+  const sources = new Map(
+    (await q(`SELECT username, source FROM bidders WHERE username IN (SELECT jsonb_array_elements_text($1::jsonb))`, [names])).map((b) => [b.username as string, b.source as 'manual' | 'import']),
+  );
+  const byPost = new Map<string, CommentIn[]>();
+  for (const c of comments) {
+    const list = byPost.get(c.post_id) || [];
+    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override });
+    byPost.set(c.post_id, list);
+  }
+  const existing = new Map(results.map((r) => [r.post_id as string, r]));
+  for (const p of posts) {
+    const cur = existing.get(p.id);
+    if (cur && !cur.auto) continue; // keputusan manual tidak disentuh
+    const { top } = evaluate(byPost.get(p.id) || [], {
+      openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt: toMs(p.close_at), ownUsername: me?.username || null,
+      sniperMinBids: SNIPER_MIN_BIDS, verified: new Set(sources.keys()),
+    });
+    const why = autoWinnerReason(top, top ? sources.get(top.username) : undefined);
+    if (!top || !why) {
+      if (cur) await q('DELETE FROM results WHERE post_id = $1 AND auto', [p.id]);
+      continue;
+    }
+    if (cur && cur.username === top.username && cur.amount === top.amount && cur.note === why) continue;
+    await q(
+      `INSERT INTO results (post_id, status, username, amount, title, close_at, decided_at, note, auto) VALUES ($1,'winner',$2,$3,$4,$5,$6,$7,true)
+       ON CONFLICT (post_id) DO UPDATE SET status='winner', username=$2, amount=$3, title=$4, close_at=$5, decided_at=$6, note=$7, auto=true WHERE results.auto`,
+      [p.id, top.username, top.amount, p.title, p.close_at, iso(Date.now()), why],
+    );
+  }
 }
 
 /** Menetapkan hasil lelang: pemenang (akun + nominal), "No Winner", atau null untuk membatalkan penetapan. */
@@ -362,8 +420,8 @@ export async function setResult(postId: string, r: { status: 'winner' | 'none'; 
   const win = r.status === 'winner';
   if (win && (!r.username || !Number.isFinite(r.amount))) throw new Error('Pemenang tidak lengkap');
   await q(
-    `INSERT INTO results (post_id, status, username, amount, title, close_at, decided_at, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     ON CONFLICT (post_id) DO UPDATE SET status=$2, username=$3, amount=$4, title=$5, close_at=$6, decided_at=$7, note=$8`,
+    `INSERT INTO results (post_id, status, username, amount, title, close_at, decided_at, note, auto) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)
+     ON CONFLICT (post_id) DO UPDATE SET status=$2, username=$3, amount=$4, title=$5, close_at=$6, decided_at=$7, note=$8, auto=false`,
     [postId, win ? 'winner' : 'none', win ? r.username : null, win ? Math.round(r.amount!) : null, post.title, post.close_at, iso(Date.now()), r.note ? String(r.note).slice(0, 200) : null],
   );
 }
@@ -375,11 +433,12 @@ export async function setOverride(commentId: string, value: 'valid' | 'invalid' 
 }
 
 export async function getState() {
-  const [posts, comments, events, bidders, results, me, lastError, lastOk] = await Promise.all([
+  const [posts, comments, events, bidders, total, results, me, lastError, lastOk] = await Promise.all([
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT * FROM events'),
-    q('SELECT username FROM bidders'),
+    q('SELECT b.username, b.source FROM bidders b WHERE b.username IN (SELECT DISTINCT username FROM comments)'),
+    q('SELECT count(*)::int AS n FROM bidders'),
     q('SELECT * FROM results ORDER BY close_at DESC NULLS LAST'),
     getKv<{ username: string }>('me'),
     getKv<{ message: string; at: number }>('lastError'),
@@ -387,6 +446,7 @@ export async function getState() {
   ]);
 
   const verified = new Set(bidders.map((b) => b.username as string));
+  const imported = new Set(bidders.filter((b) => b.source === 'import').map((b) => b.username as string));
   const byPost = new Map<string, CommentIn[]>();
   for (const c of comments) {
     const list = byPost.get(c.post_id) || [];
@@ -401,15 +461,15 @@ export async function getState() {
     me: me?.username || null,
     lastError: lastError && (!lastOk || lastError.at > lastOk) ? lastError : null,
     texts: texts(),
-    verifiedCount: bidders.length,
+    verifiedCount: Number(total[0]?.n ?? 0),
     results: results.map((r) => ({
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,
-      amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null,
+      amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null, auto: !!r.auto,
     })),
     posts: posts.map((p) => {
       const closeAt = toMs(p.close_at);
       const { rows, top } = evaluate(byPost.get(p.id) || [], {
-        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null, sniperMinBids: SNIPER_MIN_BIDS, verified,
+        openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt, ownUsername: me?.username || null, sniperMinBids: SNIPER_MIN_BIDS, verified, imported,
       });
       const ev: Record<string, unknown> = {};
       for (const e of events) {
