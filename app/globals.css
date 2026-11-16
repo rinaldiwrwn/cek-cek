@@ -128,3 +128,11 @@ input[type='datetime-local'] { min-width: 0; max-width: 100%; -webkit-appearance
 .addrow input { flex: 1; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); font-size: 16px; }
 .vlist { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
 .vlist li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+button.attn { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.feed .rowhead { margin-bottom: 6px; }
+.feed .vlist li { padding: 0; }
+.feeditem { all: unset; box-sizing: border-box; display: flex; gap: 10px; width: 100%; padding: 7px 6px; cursor: pointer; border-left: 3px solid transparent; }
+.feed li.fresh .feeditem { border-left-color: var(--warn); background: var(--warn-bg); }
+.feed li.bad .who > span:first-child { color: var(--bad); font-weight: 600; }
+.feed li.ok .who > span:first-child { color: var(--ok); }
+.feed li.chat .who > span:first-child { color: var(--muted); }

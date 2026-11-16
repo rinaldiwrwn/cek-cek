@@ -9,6 +9,7 @@ export type CommentIn = {
   text: string;
   ts: number;
   deleted: boolean;
+  deletedAt?: number | null;
   override: 'valid' | 'invalid' | 'wrong' | null; // sah, tolak, salah bid
 };
 

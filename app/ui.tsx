@@ -95,6 +95,23 @@ export function Dashboard() {
   const [seq, setSeq] = useState<string | null>(null);
   const [showVerified, setShowVerified] = useState(false);
   const [newUser, setNewUser] = useState('');
+  const [showFeed, setShowFeed] = useState(false);
+  // Batas "sudah dilihat" disimpan di browser ini; aktivitas setelahnya ditandai baru.
+  const [seen, setSeen] = useState(0);
+  useEffect(() => {
+    let v = 0;
+    try {
+      v = Number(localStorage.getItem('lm_seen')) || 0;
+    } catch {}
+    setSeen(v || Date.now());
+  }, []);
+  const markSeen = () => {
+    const t = Date.now() + offset.current;
+    setSeen(t);
+    try {
+      localStorage.setItem('lm_seen', String(t));
+    } catch {}
+  };
   const offset = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -133,6 +150,8 @@ export function Dashboard() {
 
   if (!state) return <main><p className="muted pad">{error || 'Memuat…'}</p></main>;
 
+  const feed = buildFeed(state).slice(0, 60);
+  const fresh = seen ? feed.filter((f) => f.t > seen).length : 0;
   const withClose = state.posts.filter((p) => p.closeAt != null && p.closeAt > now);
   const allOn = withClose.length > 0 && withClose.every((p) => p.autoComment);
 
@@ -178,10 +197,43 @@ export function Dashboard() {
         >
           Atur jam close berurutan
         </button>
+        <button
+          className={fresh ? 'attn' : ''}
+          aria-expanded={showFeed}
+          onClick={() => {
+            if (showFeed) markSeen();
+            setShowFeed(!showFeed);
+          }}
+        >
+          Aktivitas{fresh ? ` (${fresh} baru)` : ''}
+        </button>
         <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
           Akun sah ({state.verified.length})
         </button>
       </div>
+
+      {showFeed && (
+        <section className="note feed">
+          <div className="rowhead">
+            <strong>Aktivitas terbaru</strong>
+            <button className="mini" onClick={markSeen} disabled={!fresh}>Tandai semua sudah dilihat</button>
+          </div>
+          {!feed.length && <p className="muted">Belum ada aktivitas.</p>}
+          <ul className="vlist">
+            {feed.map((f) => (
+              <li key={f.key} className={`${f.tone}${f.t > seen ? ' fresh' : ''}`}>
+                <button className="feeditem" onClick={() => setOpen(f.postId)}>
+                  <span className="when">{time(f.t)}</span>
+                  <span className="who">
+                    <span>{f.text}</span>
+                    <span className="muted small">{f.title}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {showVerified && (
         <section className="note verified">
@@ -253,6 +305,34 @@ export function Dashboard() {
       {state.posts.length > 0 && !open && <p className="muted small hint">Geser ke samping untuk melihat lelang lain. Ketuk satu lelang untuk melihat bid-nya.</p>}
     </main>
   );
+}
+
+type FeedItem = { key: string; t: number; postId: string; title: string; text: string; tone: string };
+
+/** Menyusun aktivitas dari data yang ada: bid dan komentar masuk, bid terhapus, dan komentar otomatis. */
+function buildFeed(state: State): FeedItem[] {
+  const out: FeedItem[] = [];
+  for (const p of state.posts) {
+    const add = (key: string, t: number | null | undefined, text: string, tone = '') => {
+      if (t) out.push({ key: `${p.id}:${key}`, t, postId: p.id, title: p.title, text, tone });
+    };
+    for (const r of p.rows) {
+      if (r.own) continue;
+      if (r.isBid) {
+        const hard = r.flags.filter((f) => !SOFT.includes(f)).map((f) => FLAGS[f]);
+        add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}` : ''}`, hard.length ? 'warn' : '');
+      } else add(`c${r.id}`, r.ts, `@${r.username}: ${r.text}`, 'chat');
+      if (r.deleted) add(`d${r.id}`, r.deletedAt, `@${r.username} menghapus ${r.isBid ? `bid ${rb(r.amount)}` : 'komentar'}`, 'bad');
+    }
+    for (const kind of ['ten', 'sniper', 'close'] as Kind[]) {
+      const e = p.events[kind];
+      if (!e) continue;
+      if (e.status === 'sent') add(`e${kind}`, e.sentAt, `Komentar ${KIND_LABEL[kind]} terkirim`, 'ok');
+      else if (e.status === 'failed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} GAGAL terkirim${e.error ? `: ${e.error}` : ''}`, 'bad');
+      else if (e.status === 'missed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} tidak terkirim`, 'bad');
+    }
+  }
+  return out.sort((a, b) => b.t - a.t);
 }
 
 function phase(p: Post, now: number) {
