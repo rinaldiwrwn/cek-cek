@@ -1,7 +1,7 @@
 # Lelang Monitor
 
 Dashboard untuk memantau bid di komentar 9 postingan feed Instagram terakhir, dan mengirim komentar
-otomatis "Sniper Zone" (5 menit sebelum close) serta "Close" (detik ke-59 sebelum jam close).
+otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum close), serta "Close" (detik ke-59 sebelum jam close).
 
 ## Cara kerja
 

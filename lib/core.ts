@@ -9,8 +9,10 @@ const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil ol
 const MISSED_AFTER = 20_000; // lebih telat dari ini tidak dikirim otomatis
 const CLOSE_LEAD = 1_000; // "Close" dikirim di detik ke-59 sebelum jam close
 
-export type Kind = 'sniper' | 'close';
+export type Kind = 'ten' | 'sniper' | 'close';
+const TEN_MS = 10 * MIN; // pengumuman 10 menit sebelum close
 export const texts = () => ({
+  ten: process.env.TEN_TEXT || '10 MENIT MENUJU CLOSE!',
   sniper: process.env.SNIPER_TEXT || '🎯 SNIPER ZONE! 🎯',
   close: process.env.CLOSE_TEXT || '❌ LELANG CLOSED! ❌',
 });
@@ -29,13 +31,13 @@ async function ensureEvents(postId: string, closeAt: number | null) {
   }
   // Jadwal yang sudah terkirim / sedang diproses tidak diubah; yang terlewat atau gagal dijadwalkan ulang kalau jamnya berubah.
   await q(
-    `INSERT INTO events (post_id, kind, due_at) VALUES ($1,'sniper',$2), ($1,'close',$3)
+    `INSERT INTO events (post_id, kind, due_at) VALUES ($1,'ten',$4), ($1,'sniper',$2), ($1,'close',$3)
      ON CONFLICT (post_id, kind) DO UPDATE SET
        status = CASE WHEN events.due_at <> EXCLUDED.due_at THEN 'pending' ELSE events.status END,
        error = CASE WHEN events.due_at <> EXCLUDED.due_at THEN NULL ELSE events.error END,
        due_at = EXCLUDED.due_at
      WHERE events.status IN ('pending','missed','failed')`,
-    [postId, iso(closeAt - SNIPER_MS), iso(closeAt - CLOSE_LEAD)],
+    [postId, iso(closeAt - SNIPER_MS), iso(closeAt - CLOSE_LEAD), iso(closeAt - TEN_MS)],
   );
 }
 
