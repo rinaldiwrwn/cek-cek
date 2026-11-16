@@ -35,6 +35,7 @@ function init(): Store {
     });
     let amount = 100;
     s.comments[id] = [];
+    if (i === 0) s.comments[id].push({ id: String(s.seq++), parentId: null, username: 'kolektor88', text: '+50', ts: now - 20 * 60_000 }); // contoh bid dengan +
     for (let k = 0; k < 2 + (i % 4); k++) {
       const ts = now - (40 - k * 9 - i) * 60_000;
       s.comments[id].push({ id: String(s.seq++), parentId: null, username: USERS[(i + k) % USERS.length], text: String(amount), ts });
@@ -65,6 +66,18 @@ export function listComments(mediaId: string): IgComment[] {
     s.removed = true;
   }
   return [...list];
+}
+
+export function postReply(commentId: string, message: string): string {
+  const s = store();
+  const id = String(s.seq++);
+  for (const list of Object.values(s.comments)) {
+    if (list.some((c) => c.id === commentId)) {
+      list.push({ id, parentId: commentId, username: me.username, text: message, ts: Math.floor(Date.now() / 1000) * 1000 });
+      return id;
+    }
+  }
+  throw new Error('Instagram: komentar tidak ditemukan');
 }
 
 export function postComment(mediaId: string, message: string): string {

@@ -32,6 +32,13 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   Akun hasil impor bertanda "impor" dan bisa dikeluarkan sekaligus lewat **Batalkan impor**; mengesahkannya dengan ✅
   menjadikannya akun sah biasa.
 - Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
+- Tombol **💬 Balas sah** muncul hanya di bid berawalan "+" (mis. +50) yang sudah disahkan (✅ atau "Disahkan otomatis").
+  Menekannya mengirim balasan ke komentar bidder di Instagram (bawaan: "bid [total] sah yaa", bisa diedit sebelum
+  terkirim). Bid yang sudah dibalas bertanda "✓ Sudah dibalas".
+- **Auto-balas bid +** (mati bawaan): kalau dinyalakan, bid berawalan "+" dari akun sah yang berstatus "Disahkan otomatis"
+  langsung dibalas "bid [total] sah yaa". Hanya bid yang masuk setelah dinyalakan dan masih baru (15 menit) yang dibalas,
+  paling banyak 5 balasan per putaran dengan jeda, dan 40 balasan per jam (`AUTO_REPLY_MAX_PER_HOUR`). Balasan yang gagal
+  tidak dicoba lagi dan bisa dibalas manual. Teksnya bisa diganti lewat `AUTO_REPLY_TEXT` (pakai `{total}`).
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
 - Sniper Zone hanya aktif kalau lelang itu punya minimal 2 bid sah sebelum zonanya dimulai. Kalau kurang, komentar

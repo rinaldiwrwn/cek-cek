@@ -2,7 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { cleanUsername, parseCaption } from './parse';
-import { autoWinnerReason, evaluate, SNIPER_MS, type CommentIn } from './bids';
+import { autoReplyTargets, autoWinnerReason, evaluate, SNIPER_MS, type CommentIn } from './bids';
 
 const MIN = 60_000;
 const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
@@ -314,6 +314,7 @@ export async function tick(loop: boolean) {
   // Saat ada lelang mendekati close, cron terus mengecek komentar selama ±55 detik sampai tick berikutnya.
   for (;;) {
     const hot = await syncDuePosts().catch(() => false);
+    await autoReplies().catch(noteError);
     if (!loop || !hot || Date.now() - started > 50_000) break;
     await sleep(4_000);
   }
@@ -408,6 +409,114 @@ export async function syncAutoResults() {
   }
 }
 
+/**
+ * Membalas komentar bidder di Instagram (mis. "bid 250rb sah yaa"). Balasan ke sebuah balasan dikirim ke
+ * komentar induknya, karena Instagram hanya menerima balasan ke komentar tingkat atas.
+ */
+export async function replyToBid(commentId: string, text: string, again = false) {
+  const message = String(text || '').trim();
+  if (!message || message.length > 300) throw new Error('Balasan harus 1 sampai 300 karakter');
+  const c = (await q('SELECT * FROM comments WHERE id = $1', [commentId]))[0];
+  if (!c) throw new Error('Komentar tidak ditemukan');
+  if (c.deleted_at) throw new Error('Komentar ini sudah dihapus di Instagram');
+  // Ditandai dulu supaya dua ketukan beruntun tidak mengirim dua balasan.
+  const claim = await q(
+    `UPDATE comments SET replied_at = $2, reply_text = $3, reply_auto = false, reply_failed_at = NULL, reply_error = NULL
+     WHERE id = $1 AND ($4::boolean OR replied_at IS NULL) RETURNING id`,
+    [commentId, iso(Date.now()), message, again],
+  );
+  if (!claim.length) throw new Error('Komentar ini sudah kamu balas');
+  try {
+    await ig.postReply(c.parent_id || c.id, message);
+  } catch (e) {
+    await q(
+      'UPDATE comments SET replied_at = $2, reply_text = $3, reply_auto = $4, reply_failed_at = $5, reply_error = $6 WHERE id = $1',
+      [commentId, c.replied_at, c.reply_text, c.reply_auto, c.reply_failed_at, c.reply_error],
+    );
+    throw e;
+  }
+}
+
+// ---------- Balasan otomatis ----------
+
+const AUTO_REPLY_MAX_AGE = 15 * MIN; // bid yang lebih lama dari ini tidak dibalas otomatis
+const AUTO_REPLY_PER_TICK = 5; // paling banyak sekian balasan per putaran, diberi jeda
+const AUTO_REPLY_PER_HOUR = Math.max(1, Number(process.env.AUTO_REPLY_MAX_PER_HOUR ?? 40) || 40);
+const rbText = (n: number) => `${n.toLocaleString('id-ID')}rb`;
+const autoReplyText = (total: number) => (process.env.AUTO_REPLY_TEXT || 'bid {total} sah yaa').replace('{total}', rbText(total));
+
+export async function getAutoReply() {
+  const v = await getKv<{ on: boolean; since: number }>('autoReply');
+  return { on: !!v?.on, since: v?.since ?? null };
+}
+
+/** Menyalakan balasan otomatis. Hanya bid yang masuk setelah dinyalakan yang dibalas. */
+export async function setAutoReply(on: boolean) {
+  await setKv('autoReply', { on, since: Date.now() });
+}
+
+/**
+ * Membalas "bid [total] sah yaa" ke bid berawalan "+" dari akun sah yang sudah "Disahkan otomatis". Aman diulang:
+ * tiap komentar ditandai dulu sebelum dikirim, dan yang gagal tidak dicoba lagi (bisa dibalas manual).
+ */
+export async function autoReplies() {
+  const cfg = await getAutoReply();
+  if (!cfg.on || !cfg.since) return;
+  const now = Date.now();
+  const sentLastHour = Number((await q('SELECT count(*)::int AS n FROM comments WHERE replied_at > $1', [iso(now - 60 * MIN)]))[0]?.n ?? 0);
+  let budget = Math.min(AUTO_REPLY_PER_TICK, AUTO_REPLY_PER_HOUR - sentLastHour);
+  if (budget <= 0) return;
+
+  const posts = await q(`SELECT * FROM posts WHERE close_at IS NULL OR close_at > $1`, [iso(now - 10 * MIN)]);
+  if (!posts.length) return;
+  const ids = JSON.stringify(posts.map((p) => p.id));
+  const [comments, me] = await Promise.all([
+    q(`SELECT * FROM comments WHERE post_id IN (SELECT jsonb_array_elements_text($1::jsonb))`, [ids]),
+    getKv<{ username: string }>('me'),
+  ]);
+  const names = JSON.stringify([...new Set(comments.map((c) => c.username as string))]);
+  const sources = await q(`SELECT username FROM bidders WHERE username IN (SELECT jsonb_array_elements_text($1::jsonb))`, [names]);
+  const verified = new Set(sources.map((b) => b.username as string));
+  const byPost = new Map<string, CommentIn[]>();
+  for (const c of comments) {
+    const list = byPost.get(c.post_id) || [];
+    list.push({
+      id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override,
+      repliedAt: toMs(c.replied_at), replyFailedAt: toMs(c.reply_failed_at),
+    });
+    byPost.set(c.post_id, list);
+  }
+  for (const p of posts) {
+    if (budget <= 0) break;
+    const { rows } = evaluate(byPost.get(p.id) || [], {
+      openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt: toMs(p.close_at), ownUsername: me?.username || null,
+      sniperMinBids: SNIPER_MIN_BIDS, verified,
+    });
+    for (const r of autoReplyTargets(rows, { since: cfg.since, now, maxAgeMs: AUTO_REPLY_MAX_AGE })) {
+      if (budget <= 0) break;
+      const message = `${r.parentId ? `@${r.username} ` : ''}${autoReplyText(r.amount!)}`;
+      const claim = await q(
+        `UPDATE comments SET replied_at = $2, reply_text = $3, reply_auto = true
+         WHERE id = $1 AND replied_at IS NULL AND reply_failed_at IS NULL RETURNING id`,
+        [r.id, iso(Date.now()), message],
+      );
+      if (!claim.length) continue; // sudah dibalas oleh proses lain
+      budget--;
+      try {
+        await ig.postReply(r.parentId || r.id, message);
+      } catch (e) {
+        const msg = String((e as Error)?.message || e);
+        await q(
+          'UPDATE comments SET replied_at = NULL, reply_text = NULL, reply_auto = false, reply_failed_at = $2, reply_error = $3 WHERE id = $1',
+          [r.id, iso(Date.now()), msg.slice(0, 300)],
+        );
+        await noteError(`Balasan otomatis ke @${r.username} gagal: ${msg}`);
+      }
+      await sleep(1200); // jeda antar balasan
+    }
+  }
+}
+
 /** Menetapkan hasil lelang: pemenang (akun + nominal), "No Winner", atau null untuk membatalkan penetapan. */
 export async function setResult(postId: string, r: { status: 'winner' | 'none'; username?: string; amount?: number; note?: string } | null) {
   if (!r) {
@@ -432,7 +541,7 @@ export async function setOverride(commentId: string, value: 'valid' | 'invalid' 
 }
 
 export async function getState() {
-  const [posts, comments, events, bidders, total, results, me, lastError, lastOk] = await Promise.all([
+  const [posts, comments, events, bidders, total, results, me, lastError, lastOk, autoReply] = await Promise.all([
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT * FROM events'),
@@ -442,6 +551,7 @@ export async function getState() {
     getKv<{ username: string }>('me'),
     getKv<{ message: string; at: number }>('lastError'),
     getKv<number>('lastOk'),
+    getAutoReply(),
   ]);
 
   const verified = new Set(bidders.map((b) => b.username as string));
@@ -449,7 +559,7 @@ export async function getState() {
   const byPost = new Map<string, CommentIn[]>();
   for (const c of comments) {
     const list = byPost.get(c.post_id) || [];
-    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, deletedAt: toMs(c.deleted_at), override: c.override });
+    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, deletedAt: toMs(c.deleted_at), override: c.override, repliedAt: toMs(c.replied_at), repliedAuto: !!c.reply_auto, replyFailedAt: toMs(c.reply_failed_at), replyError: c.reply_error });
     byPost.set(c.post_id, list);
   }
 
@@ -460,6 +570,7 @@ export async function getState() {
     me: me?.username || null,
     lastError: lastError && (!lastOk || lastError.at > lastOk) ? lastError : null,
     texts: texts(),
+    autoReply,
     verifiedCount: Number(total[0]?.n ?? 0),
     results: results.map((r) => ({
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,

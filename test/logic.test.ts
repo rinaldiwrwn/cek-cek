@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractUsernames, parseBid, parseCaption } from '../lib/parse';
-import { autoWinnerReason, evaluate, type CommentIn } from '../lib/bids';
+import { autoReplyTargets, autoWinnerReason, evaluate, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
 Mohon 𝗕𝗔𝗖𝗔 𝗗𝗘𝗦𝗞𝗥𝗜𝗣𝗦𝗜
@@ -126,8 +126,29 @@ test('bid dari akun sah disahkan otomatis', () => {
     { ...rules, verified: new Set(['a', 'b']) },
   );
   assert.deepEqual(rows.map((r) => r.autoApproved), [true, false, true, false, false, false, false]);
+  assert.deepEqual(rows.map((r) => r.relative), [false, false, true, true, true, true, false]);
   assert.deepEqual(rows[1].flags, ['tidakNaik']);
   assert.equal(rows[3].valid, true); // bukan akun sah: tetap dihitung sementara, tapi belum dicek
+});
+
+test('balasan otomatis hanya untuk bid + yang disahkan otomatis dan masih baru', () => {
+  const now = CLOSE - 3_000_000;
+  const since = now - 2_000_000;
+  const { rows } = evaluate(
+    [
+      c(1, 'a', '100', 3600), // sebelum fitur dinyalakan
+      c(2, 'a', '+50', 3200), // akun sah, baru, berawalan +  -> dibalas
+      c(3, 'z', '+50', 3100), // bukan akun sah
+      c(4, 'a', '+50', 3050, { repliedAt: 1 }), // sudah dibalas
+      c(5, 'a', '+50', 3040, { replyFailedAt: 1 }), // pernah gagal
+      c(6, 'a', '300', 3030), // bukan berawalan +
+      c(7, 'a', '+50', 3020, { deleted: true }), // terhapus
+      c(8, 'a', '+50', 4100), // lama: lewat batas umur
+    ],
+    { ...rules, verified: new Set(['a']) },
+  );
+  const ids = autoReplyTargets(rows, { since, now, maxAgeMs: 900_000 }).map((r) => r.id);
+  assert.deepEqual(ids, ['2']);
 });
 
 test('pemenang bawaan', () => {
