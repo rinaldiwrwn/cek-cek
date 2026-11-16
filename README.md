@@ -18,6 +18,9 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
 - Tombol **Aktivitas** menampilkan kejadian terbaru (bid dan komentar masuk, bid terhapus, komentar otomatis terkirim
   atau gagal) dan jumlah yang belum kamu lihat di browser itu.
+- Bid dari akun yang ada di daftar akun sah otomatis berstatus "Disahkan otomatis" (✅ menyala). Status itu tidak berlaku
+  kalau bid-nya kena penanda (sama atau lebih rendah dari bid sebelumnya, terhapus, terlambat, bukan kelipatan, lewat
+  max jump, dan sebagainya), dan keputusan ✅ atau ❌ yang kamu tekan sendiri selalu menang.
 - Pemenang bawaan: setelah lelang close, bid sah tertinggi otomatis menjadi pemenang kalau bid itu sudah kamu sahkan (✅)
   atau akunnya ada di daftar akun sah. Hasil otomatis ikut berubah kalau keputusanmu berubah, dan tidak pernah menimpa
   hasil yang kamu tetapkan sendiri.

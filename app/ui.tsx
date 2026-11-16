@@ -371,7 +371,7 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
   const ph = phase(p, now);
   const bids = p.rows.filter((r) => r.isBid);
   // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
-  const check = bids.filter((r) => !r.override && (!r.verified || r.flags.length > 0)).length;
+  const check = bids.filter((r) => !r.override && !r.autoApproved).length;
   return (
     <li className={`post ${ph.key}${open ? ' open' : ''}`}>
       <button className="summary" onClick={toggle} aria-expanded={open}>
@@ -670,9 +670,10 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           )}
         </span>
         <span className="text">{r.text}</span>
-        {r.isBid && (r.flags.length > 0 || r.override || !r.verified) && (
+        {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved) && (
           <span className="flags">
             {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : 'Ditolak'}</span>}
+            {r.autoApproved && <span className="flag ok">Disahkan otomatis</span>}
             {!r.override && !r.verified && <span className="flag soft">Belum dicek</span>}
             {r.flags.map((f) => <span key={f} className={`flag${SOFT.includes(f) ? ' soft' : ''}`}>{FLAGS[f]}</span>)}
           </span>
@@ -682,7 +683,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
         <span className="amount">
           <strong>{rb(r.amount)}</strong>
           <span className="decide">
-            <button className={r.override === 'valid' ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid'}>✅</button>
+            <button className={r.override === 'valid' || r.autoApproved ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid' || r.autoApproved}>✅</button>
             <button className={r.override === 'invalid' || r.override === 'wrong' ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid ini tidak dihitung" aria-pressed={r.override === 'invalid'}>❌</button>
           </span>
         </span>

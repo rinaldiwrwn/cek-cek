@@ -112,6 +112,24 @@ test('Sniper Zone tidak aktif kalau bid sah kurang dari 2', () => {
   assert.deepEqual(tolak.rows[2].flags, []);
 });
 
+test('bid dari akun sah disahkan otomatis', () => {
+  const { rows } = evaluate(
+    [
+      c(1, 'a', '100', 3600), // akun sah, tanpa penanda
+      c(2, 'b', '100', 3500), // akun sah, tapi sama dengan bid sebelumnya
+      c(3, 'a', '+50', 3400), // akun sah, 150
+      c(4, 'z', '+50', 3300), // bukan akun sah
+      c(5, 'b', '+50', 3200, { deleted: true }), // akun sah, tapi bid dihapus
+      c(6, 'a', '+50', 3100, { override: 'invalid' }), // keputusanmu menang
+      c(7, 'a', '600', 3000), // akun sah, tapi lewat max jump
+    ],
+    { ...rules, verified: new Set(['a', 'b']) },
+  );
+  assert.deepEqual(rows.map((r) => r.autoApproved), [true, false, true, false, false, false, false]);
+  assert.deepEqual(rows[1].flags, ['tidakNaik']);
+  assert.equal(rows[3].valid, true); // bukan akun sah: tetap dihitung sementara, tapi belum dicek
+});
+
 test('pemenang bawaan', () => {
   const top = (extra: Partial<CommentIn> = {}) => evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, extra)], rules).top;
   assert.equal(autoWinnerReason(top(), undefined), null); // belum disahkan dan bukan akun sah
