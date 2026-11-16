@@ -1,4 +1,5 @@
-// Akses Instagram lewat API resmi (Instagram API with Instagram Login). IG_MOCK=1 memakai data palsu.
+// Akses Instagram lewat API resmi (token Instagram login maupun Unified/Facebook login). IG_MOCK=1 memakai data palsu.
+import { createHash } from 'node:crypto';
 import { getKv, setKv } from './db';
 import * as mock from './mock';
 
@@ -8,15 +9,17 @@ export type IgComment = { id: string; parentId: string | null; username: string;
 export const isMock = () => process.env.IG_MOCK === '1';
 export const hasToken = () => isMock() || !!process.env.IG_ACCESS_TOKEN;
 
-const base = () => {
-  const b = (process.env.IG_API_BASE || 'https://graph.instagram.com').replace(/\/$/, '');
-  return process.env.IG_API_VERSION ? `${b}/${process.env.IG_API_VERSION}` : b;
-};
+const IG_HOST = 'https://graph.instagram.com';
+const FB_HOST = 'https://graph.facebook.com';
+const ver = () => (process.env.IG_API_VERSION ? `/${process.env.IG_API_VERSION}` : '');
 const parseTs = (s: string) => Date.parse(s.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
 
 const REFRESH_AFTER = 7 * 86_400_000;
 
-/** Token dari env, diperpanjang otomatis tiap minggu (masa berlaku ±60 hari) dan disimpan di database. */
+/**
+ * Token dari env. Token jenis "Instagram login" berlaku ±60 hari dan diperpanjang otomatis tiap minggu;
+ * token system user (Unified login) tidak kedaluwarsa, dan percobaan perpanjangannya gagal tanpa akibat.
+ */
 async function token(): Promise<string> {
   const env = process.env.IG_ACCESS_TOKEN;
   if (!env) throw new Error('IG_ACCESS_TOKEN belum diisi');
@@ -28,7 +31,7 @@ async function token(): Promise<string> {
     await setKv('token', { ...t, at: Date.now() }); // tandai dulu supaya tidak dicoba berulang
     try {
       const r = await fetch(
-        `${base()}/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(t.value)}`,
+        `${IG_HOST}/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(t.value)}`,
       );
       const j = await r.json();
       if (j.access_token) {
@@ -40,8 +43,7 @@ async function token(): Promise<string> {
   return t.value;
 }
 
-async function call(path: string, init?: RequestInit): Promise<any> {
-  const url = path.startsWith('http') ? path : `${base()}${path}`;
+async function request(url: string, init?: RequestInit): Promise<any> {
   const sep = url.includes('?') ? '&' : '?';
   const full = url.includes('access_token=') ? url : `${url}${sep}access_token=${encodeURIComponent(await token())}`;
   const r = await fetch(full, { ...init, cache: 'no-store' });
@@ -50,16 +52,77 @@ async function call(path: string, init?: RequestInit): Promise<any> {
   return j;
 }
 
+type Account = { base: string; id: string; username: string; key: string };
+
+/**
+ * Menentukan akun Instagram dan alamat API yang cocok dengan token:
+ * - IG_USER_ID diisi: pakai ID itu (bawaan graph.facebook.com, untuk token Unified/Facebook login).
+ * - Tanpa IG_USER_ID: coba token Instagram login, lalu cari akun lewat Halaman Facebook.
+ */
+async function account(): Promise<Account> {
+  const key = createHash('sha256')
+    .update([process.env.IG_ACCESS_TOKEN, process.env.IG_USER_ID, process.env.IG_API_BASE, ver()].join('|'))
+    .digest('hex')
+    .slice(0, 16);
+  const cached = await getKv<Account>('igAccount');
+  if (cached?.key === key) return cached;
+
+  const forced = process.env.IG_API_BASE?.replace(/\/$/, '');
+  const userId = process.env.IG_USER_ID?.trim();
+  let found: Omit<Account, 'key'> | null = null;
+  const errors: string[] = [];
+
+  if (userId) {
+    const base = forced || FB_HOST;
+    const j = await request(`${base}${ver()}/${userId}?fields=username`);
+    found = { base, id: userId, username: j.username };
+  } else {
+    if (!forced || forced.includes('instagram')) {
+      try {
+        const base = forced || IG_HOST;
+        const j = await request(`${base}${ver()}/me?fields=user_id,username`);
+        found = { base, id: 'me', username: j.username };
+      } catch (e) {
+        errors.push(String((e as Error).message));
+      }
+    }
+    if (!found && (!forced || forced.includes('facebook'))) {
+      try {
+        const base = forced || FB_HOST;
+        const j = await request(`${base}${ver()}/me/accounts?fields=instagram_business_account{id,username}&limit=50`);
+        const ig = (j.data || []).map((p: any) => p.instagram_business_account).find(Boolean);
+        if (ig) found = { base, id: ig.id, username: ig.username };
+      } catch (e) {
+        errors.push(String((e as Error).message));
+      }
+    }
+  }
+  if (!found?.username) {
+    throw new Error(
+      `Akun Instagram tidak ditemukan dari token ini. Isi variabel IG_USER_ID dengan ID akun Instagram dari halaman Meta.${errors.length ? ` (${errors.join('; ')})` : ''}`,
+    );
+  }
+  const acct = { ...found, key };
+  await setKv('igAccount', acct);
+  return acct;
+}
+
+async function call(path: string, init?: RequestInit): Promise<any> {
+  if (path.startsWith('http')) return request(path, init);
+  const a = await account();
+  return request(`${a.base}${ver()}${path.replace('{ig}', a.id)}`, init);
+}
+
 export async function getMe(): Promise<{ id: string; username: string }> {
   if (isMock()) return mock.me;
-  const j = await call('/me?fields=user_id,username');
-  return { id: String(j.user_id ?? j.id), username: j.username };
+  const a = await account();
+  return { id: a.id, username: a.username };
 }
 
 export async function listMedia(limit = 9): Promise<Media[]> {
   if (isMock()) return mock.listMedia();
   const j = await call(
-    `/me/media?fields=id,caption,permalink,media_type,thumbnail_url,media_url,timestamp&limit=${limit}`,
+    `/{ig}/media?fields=id,caption,permalink,media_type,thumbnail_url,media_url,timestamp&limit=${limit}`,
   );
   return (j.data || []).slice(0, limit).map((m: any) => ({
     id: m.id,

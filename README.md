@@ -31,10 +31,10 @@ Buka http://localhost:3000. Datanya palsu dan tidak ada yang dikirim ke Instagra
 
 1. **Vercel**: import repo ini sebagai project baru (pastikan project tersambung ke repo ini, bukan repo lain).
 2. **Database**: di project Vercel buka tab Storage, tambahkan Neon (Postgres). `DATABASE_URL` terisi sendiri.
-3. **Meta**: di developers.facebook.com buat app, tambahkan produk Instagram dengan "Instagram Login",
-   hubungkan akun lelang, beri izin `instagram_business_basic` dan `instagram_business_manage_comments`,
-   lalu buat token akses.
-4. **Variabel** (Settings > Environment Variables): `DASHBOARD_PASSWORD`, `CRON_SECRET`, `IG_ACCESS_TOKEN`. Deploy ulang.
+3. **Meta**: di developers.facebook.com buat app dengan use case "Manage messaging & content on Instagram",
+   sambungkan business portfolio, buka "API setup with Unified login", tambahkan akun lelang, lalu buat token akses.
+   Catat juga ID akun Instagram (angka) yang ditampilkan di sana.
+4. **Variabel** (Settings > Environment Variables): `DASHBOARD_PASSWORD`, `CRON_SECRET`, `IG_ACCESS_TOKEN`, `IG_USER_ID`. Deploy ulang.
 5. **Pemicu per menit**: di cron-job.org buat job tiap menit ke
    `https://ALAMAT-KAMU.vercel.app/api/cron` dengan header `Authorization: Bearer <CRON_SECRET>`.
 
