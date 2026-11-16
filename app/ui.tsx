@@ -667,7 +667,8 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
   // Membalas komentar bidder di Instagram. Teksnya bisa diedit dulu; OK berarti terkirim.
   const reply = async () => {
     const thread = r.parentId ? `@${r.username} ` : '';
-    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):`, `${thread}bid ${rb(r.amount)} sah yaa`);
+    const warn = r.solid ? '' : '\n\nPERHATIAN: total ini bergantung pada bid sebelumnya yang belum kamu cek. Kalau bid itu nanti kamu tolak, total ini berubah.';
+    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):${warn}`, `${thread}bid ${rb(r.amount)} sah yaa`);
     if (!text || !text.trim()) return;
     if (r.repliedAt && !confirm('Komentar ini sudah pernah kamu balas. Kirim balasan lagi?')) return;
     await act({ type: 'reply', id: r.id, text: text.trim(), again: !!r.repliedAt });
@@ -695,10 +696,11 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
             {r.repliedAt ? (r.repliedAuto ? '✓ Dibalas otomatis' : '✓ Sudah dibalas') : '💬 Balas sah'}
           </button>
         )}
-        {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved || r.replyFailedAt) && (
+        {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved || r.replyFailedAt || (r.relative && r.valid && !r.solid)) && (
           <span className="flags">
             {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : 'Ditolak'}</span>}
             {r.autoApproved && <span className="flag ok">Disahkan otomatis</span>}
+            {r.relative && r.valid && !r.solid && <span className="flag soft" title="Totalnya dihitung dari bid sebelumnya yang belum kamu sahkan">Total belum pasti</span>}
             {r.replyFailedAt && <span className="flag" title={r.replyError || undefined}>Balasan otomatis gagal</span>}
             {!r.override && !r.verified && <span className="flag soft">Belum dicek</span>}
             {r.flags.map((f) => <span key={f} className={`flag${SOFT.includes(f) ? ' soft' : ''}`}>{FLAGS[f]}</span>)}
