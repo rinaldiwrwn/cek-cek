@@ -16,6 +16,7 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   bertanda "✓ Akun sah". **Salah bid** membatalkan satu bid tanpa mengubah daftar. Akun keluar dari daftar kalau kamu menekan **Tolak**, kalau ia menghapus bid, atau kalau
   kamu mengetuk tanda "✓ Akun sah". Bid dari akun di luar daftar bertanda "Belum dicek".
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
+- Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
 - Komentar otomatis **mati secara bawaan**. Nyalakan per postingan atau lewat "Aktifkan semua auto-komentar".

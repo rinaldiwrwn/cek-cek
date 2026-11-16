@@ -93,6 +93,8 @@ export function Dashboard() {
   const [now, setNow] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [seq, setSeq] = useState<string | null>(null);
+  const [showVerified, setShowVerified] = useState(false);
+  const [newUser, setNewUser] = useState('');
   const offset = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -176,7 +178,43 @@ export function Dashboard() {
         >
           Atur jam close berurutan
         </button>
+        <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
+          Akun sah ({state.verified.length})
+        </button>
       </div>
+
+      {showVerified && (
+        <section className="note verified">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newUser.trim()) return;
+              await act({ type: 'verify', username: newUser, on: true });
+              setNewUser('');
+            }}
+          >
+            <label htmlFor="newuser">Tambah akun ke daftar akun sah</label>
+            <span className="addrow">
+              <input id="newuser" type="text" placeholder="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={newUser} onChange={(e) => setNewUser(e.target.value)} />
+              <button className="primary" disabled={!newUser.trim()}>Tambah</button>
+            </span>
+          </form>
+          {!state.verified.length && <p className="muted">Daftar masih kosong. Akun masuk ke sini saat bid-nya kamu sahkan dengan ✅.</p>}
+          <ul className="vlist">
+            {state.verified.map((v) => (
+              <li key={v.username}>
+                <span>
+                  <strong>@{v.username}</strong>
+                  <span className="muted small"> · sejak {dateFmt.format(v.at)}</span>
+                </span>
+                <button className="mini" onClick={() => confirm(`Keluarkan @${v.username} dari daftar akun sah?`) && act({ type: 'verify', username: v.username, on: false })}>
+                  Keluarkan
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {seq != null && (
         <form
