@@ -323,7 +323,7 @@ export async function getState() {
   const byPost = new Map<string, CommentIn[]>();
   for (const c of comments) {
     const list = byPost.get(c.post_id) || [];
-    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override });
+    list.push({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, deletedAt: toMs(c.deleted_at), override: c.override });
     byPost.set(c.post_id, list);
   }
 
