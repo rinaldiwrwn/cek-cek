@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { getState, refresh, sendNow, setOverride, setSequence, setVerified, syncMedia, tick, updatePost } from '@/lib/core';
+import { getState, refresh, resetEvent, sendNow, setOverride, setSequence, setVerified, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -30,6 +30,7 @@ async function action(req: Request) {
     if (b.type === 'post') await updatePost(String(b.id), b.patch || {});
     else if (b.type === 'override') await setOverride(String(b.id), ['valid', 'invalid', 'wrong'].includes(b.value) ? b.value : null);
     else if (b.type === 'send' && ['ten', 'sniper', 'close'].includes(b.kind)) await sendNow(String(b.id), b.kind);
+    else if (b.type === 'reset' && ['ten', 'sniper', 'close'].includes(b.kind)) await resetEvent(String(b.id), b.kind);
     else if (b.type === 'verify' && typeof b.username === 'string') await setVerified(b.username, !!b.on);
     else if (b.type === 'sequence') await setSequence(Number(b.startAt), 5);
     else if (b.type === 'reload') await syncMedia(true);

@@ -241,6 +241,15 @@ async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
   await send(ev.post_id, ev.kind);
 }
 
+/** Mengembalikan komentar ke status terjadwal, mis. setelah uji kirim yang komentarnya sudah dihapus di Instagram. */
+export async function resetEvent(postId: string, kind: Kind) {
+  await q(
+    `UPDATE events SET status='pending', sent_at=NULL, comment_id=NULL, error=NULL
+     WHERE post_id=$1 AND kind=$2 AND status IN ('sent','failed','missed')`,
+    [postId, kind],
+  );
+}
+
 export async function sendNow(postId: string, kind: Kind) {
   const r = await q(
     `UPDATE events SET status='claimed', claimed_at=$3 WHERE post_id=$1 AND kind=$2 AND status IN ('pending','missed','failed') RETURNING kind`,
@@ -286,7 +295,9 @@ export async function tick(loop: boolean) {
 // ---------- Data dashboard ----------
 
 /** Daftar akun sah: akun yang bid-nya pernah kamu sahkan. Berlaku di semua lelang, sekarang dan berikutnya. */
-export async function setVerified(username: string, on: boolean) {
+export async function setVerified(raw: string, on: boolean) {
+  const username = raw.trim().replace(/^@/, '').toLowerCase();
+  if (!/^[a-z0-9._]{1,30}$/.test(username)) throw new Error('Username tidak valid');
   if (on) await q('INSERT INTO bidders (username, verified_at) VALUES ($1, $2) ON CONFLICT DO NOTHING', [username, iso(Date.now())]);
   else await q('DELETE FROM bidders WHERE username = $1', [username]);
 }
@@ -302,7 +313,7 @@ export async function getState() {
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT * FROM events'),
-    q('SELECT username FROM bidders'),
+    q('SELECT username, verified_at FROM bidders ORDER BY username'),
     getKv<{ username: string }>('me'),
     getKv<{ message: string; at: number }>('lastError'),
     getKv<number>('lastOk'),
@@ -323,6 +334,7 @@ export async function getState() {
     me: me?.username || null,
     lastError: lastError && (!lastOk || lastError.at > lastOk) ? lastError : null,
     texts: texts(),
+    verified: bidders.map((b) => ({ username: b.username as string, at: toMs(b.verified_at)! })),
     posts: posts.map((p) => {
       const closeAt = toMs(p.close_at);
       const { rows, top } = evaluate(byPost.get(p.id) || [], {

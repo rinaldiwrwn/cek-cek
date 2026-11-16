@@ -93,6 +93,8 @@ export function Dashboard() {
   const [now, setNow] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [seq, setSeq] = useState<string | null>(null);
+  const [showVerified, setShowVerified] = useState(false);
+  const [newUser, setNewUser] = useState('');
   const offset = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -176,7 +178,43 @@ export function Dashboard() {
         >
           Atur jam close berurutan
         </button>
+        <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
+          Akun sah ({state.verified.length})
+        </button>
       </div>
+
+      {showVerified && (
+        <section className="note verified">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newUser.trim()) return;
+              await act({ type: 'verify', username: newUser, on: true });
+              setNewUser('');
+            }}
+          >
+            <label htmlFor="newuser">Tambah akun ke daftar akun sah</label>
+            <span className="addrow">
+              <input id="newuser" type="text" placeholder="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={newUser} onChange={(e) => setNewUser(e.target.value)} />
+              <button className="primary" disabled={!newUser.trim()}>Tambah</button>
+            </span>
+          </form>
+          {!state.verified.length && <p className="muted">Daftar masih kosong. Akun masuk ke sini saat bid-nya kamu sahkan dengan ✅.</p>}
+          <ul className="vlist">
+            {state.verified.map((v) => (
+              <li key={v.username}>
+                <span>
+                  <strong>@{v.username}</strong>
+                  <span className="muted small"> · sejak {dateFmt.format(v.at)}</span>
+                </span>
+                <button className="mini" onClick={() => confirm(`Keluarkan @${v.username} dari daftar akun sah?`) && act({ type: 'verify', username: v.username, on: false })}>
+                  Keluarkan
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {seq != null && (
         <form
@@ -206,6 +244,13 @@ export function Dashboard() {
           <PostCard key={p.id} p={p} now={now} open={open === p.id} toggle={() => setOpen(open === p.id ? null : p.id)} act={act} />
         ))}
       </ul>
+      {state.posts.filter((p) => p.id === open).map((p) => (
+        <section key={p.id} className="post detailbox">
+          <h2 className="detailtitle">{p.title}</h2>
+          <Detail p={p} act={act} />
+        </section>
+      ))}
+      {state.posts.length > 0 && !open && <p className="muted small hint">Geser ke samping untuk melihat lelang lain. Ketuk satu lelang untuk melihat bid-nya.</p>}
     </main>
   );
 }
@@ -249,6 +294,18 @@ function EventSlot({ p, kind, now, act }: { p: Post; kind: Kind; now: number; ac
           Kirim
         </button>
       )}
+      {e.status === 'sent' && (
+        <button
+          className="mini"
+          title="Jadwalkan ulang komentar ini"
+          onClick={() =>
+            confirm(`Jadwalkan ulang komentar ${label} untuk "${p.title}"?\n\nPakai ini kalau komentar tadi hanya uji coba dan sudah kamu hapus di Instagram. Kalau komentarnya masih ada, komentar ini akan terkirim dua kali.`) &&
+            act({ type: 'reset', id: p.id, kind })
+          }
+        >
+          Ulang
+        </button>
+      )}
     </span>
   );
 }
@@ -259,7 +316,7 @@ function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: b
   // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
   const check = bids.filter((r) => !r.override && (!r.verified || r.flags.length > 0)).length;
   return (
-    <li className={`post ${ph.key}`}>
+    <li className={`post ${ph.key}${open ? ' open' : ''}`}>
       <button className="summary" onClick={toggle} aria-expanded={open}>
         {p.thumb ? <img src={p.thumb} alt="" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} /> : <span className="thumb" />}
         <span className="info">
@@ -284,7 +341,6 @@ function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: b
         </label>
       </div>
 
-      {open && <Detail p={p} act={act} />}
     </li>
   );
 }
@@ -330,7 +386,7 @@ function Detail({ p, act }: { p: Post; act: (b: unknown) => Promise<void> }) {
         {field('openBid', 'Open bid')}
         {field('increment', 'Kelipatan')}
         {field('maxJump', 'Max jump')}
-        <button className="primary wide">Simpan</button>
+        <button className="primary wide">Simpan aturan lelang</button>
       </form>
 
       <div className="toolbar">
