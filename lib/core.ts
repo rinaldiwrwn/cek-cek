@@ -7,6 +7,7 @@ import { evaluate, SNIPER_MS, type CommentIn } from './bids';
 const MIN = 60_000;
 const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
 const MISSED_AFTER = 20_000; // lebih telat dari ini tidak dikirim otomatis
+const SNIPER_MIN_BIDS = Math.max(0, Number(process.env.SNIPER_MIN_BIDS ?? 2) || 0); // Sniper Zone hanya diumumkan kalau bid sah minimal sebanyak ini
 const CLOSE_LEAD = 1_000; // "Close" dikirim di detik ke-59 sebelum jam close
 
 export type Kind = 'ten' | 'sniper' | 'close';
@@ -36,7 +37,7 @@ async function ensureEvents(postId: string, closeAt: number | null) {
        status = CASE WHEN events.due_at <> EXCLUDED.due_at THEN 'pending' ELSE events.status END,
        error = CASE WHEN events.due_at <> EXCLUDED.due_at THEN NULL ELSE events.error END,
        due_at = EXCLUDED.due_at
-     WHERE events.status IN ('pending','missed','failed')`,
+     WHERE events.status IN ('pending','missed','failed','skipped')`,
     [postId, iso(closeAt - SNIPER_MS), iso(closeAt - CLOSE_LEAD), iso(closeAt - TEN_MS)],
   );
 }
@@ -224,9 +225,26 @@ async function send(postId: string, kind: Kind) {
   await noteError(lastErr);
 }
 
+/** Jumlah bid yang saat ini dihitung sah di sebuah lelang (bid yang kamu tolak tidak ikut). */
+async function countValidBids(postId: string) {
+  const [post, comments, me] = await Promise.all([
+    q('SELECT * FROM posts WHERE id = $1', [postId]),
+    q('SELECT * FROM comments WHERE post_id = $1', [postId]),
+    getKv<{ username: string }>('me'),
+  ]);
+  if (!post.length) return 0;
+  const p = post[0];
+  const { rows } = evaluate(
+    comments.map((c) => ({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override })),
+    { openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt: toMs(p.close_at), ownUsername: me?.username || null },
+  );
+  return rows.filter((r) => r.isBid && r.valid).length;
+}
+
 async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
   const due = toMs(ev.due_at)!;
-  await sleep(due - Date.now() - 1500);
+  const gated = ev.kind === 'sniper' && SNIPER_MIN_BIDS > 0;
+  await sleep(due - Date.now() - (gated ? 4000 : 1500));
   // Cek ulang sesaat sebelum kirim: auto-komentar bisa saja dimatikan atau jamnya diubah.
   const r = await q(
     `SELECT e.status, e.due_at, p.auto_comment FROM events e JOIN posts p ON p.id = e.post_id WHERE e.post_id=$1 AND e.kind=$2`,
@@ -237,6 +255,17 @@ async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
     await q(`UPDATE events SET status='pending' WHERE post_id=$1 AND kind=$2 AND status='claimed'`, [ev.post_id, ev.kind]);
     return;
   }
+  if (gated) {
+    // Ambil komentar terbaru dulu, lalu lewati pengumuman kalau bid sah belum cukup.
+    await syncComments(ev.post_id).catch(noteError);
+    const n = await countValidBids(ev.post_id);
+    if (n < SNIPER_MIN_BIDS) {
+      await q(`UPDATE events SET status='skipped', error=$3 WHERE post_id=$1 AND kind=$2 AND status='claimed'`, [
+        ev.post_id, ev.kind, `Bid sah baru ${n}, minimal ${SNIPER_MIN_BIDS}`,
+      ]);
+      return;
+    }
+  }
   await sleep(due - Date.now());
   await send(ev.post_id, ev.kind);
 }
@@ -245,14 +274,14 @@ async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
 export async function resetEvent(postId: string, kind: Kind) {
   await q(
     `UPDATE events SET status='pending', sent_at=NULL, comment_id=NULL, error=NULL
-     WHERE post_id=$1 AND kind=$2 AND status IN ('sent','failed','missed')`,
+     WHERE post_id=$1 AND kind=$2 AND status IN ('sent','failed','missed','skipped')`,
     [postId, kind],
   );
 }
 
 export async function sendNow(postId: string, kind: Kind) {
   const r = await q(
-    `UPDATE events SET status='claimed', claimed_at=$3 WHERE post_id=$1 AND kind=$2 AND status IN ('pending','missed','failed') RETURNING kind`,
+    `UPDATE events SET status='claimed', claimed_at=$3 WHERE post_id=$1 AND kind=$2 AND status IN ('pending','missed','failed','skipped') RETURNING kind`,
     [postId, kind, iso(Date.now())],
   );
   if (!r.length) throw new Error('Komentar ini sudah terkirim atau sedang diproses');

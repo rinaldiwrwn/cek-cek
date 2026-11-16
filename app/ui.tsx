@@ -305,6 +305,7 @@ function buildFeed(state: State): FeedItem[] {
       if (e.status === 'sent') add(`e${kind}`, e.sentAt, `Komentar ${KIND_LABEL[kind]} terkirim`, 'ok');
       else if (e.status === 'failed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} GAGAL terkirim${e.error ? `: ${e.error}` : ''}`, 'bad');
       else if (e.status === 'missed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} tidak terkirim`, 'bad');
+      else if (e.status === 'skipped') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} dilewati${e.error ? ` (${e.error})` : ''}`, 'chat');
     }
   }
   return out.sort((a, b) => b.t - a.t);
@@ -327,6 +328,7 @@ function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
   if (e.status === 'sent') [status, tone] = [`terkirim ${time(e.sentAt!)}`, 'ok'];
   else if (e.status === 'claimed') [status, tone] = ['bersiap…', 'warn'];
   else if (e.status === 'failed') [status, tone] = ['gagal', 'bad'];
+  else if (e.status === 'skipped') [status, tone] = ['dilewati, bid kurang', 'off'];
   else if (e.status === 'missed' || e.dueAt < now - 20_000) [status, tone] = ['tidak terkirim', 'bad'];
   else if (!p.autoComment) [status, tone] = ['nonaktif', 'off'];
   return (

@@ -25,6 +25,8 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
 - Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
+- Komentar "Sniper Zone" otomatis hanya dikirim kalau lelang itu sudah punya minimal 2 bid sah. Kalau kurang, statusnya
+  "dilewati" dan masih bisa dikirim manual lewat tombol Kirim.
 - Komentar otomatis **mati secara bawaan**. Nyalakan per postingan atau lewat "Aktifkan semua auto-komentar".
 
 ## Mencoba tanpa Instagram
