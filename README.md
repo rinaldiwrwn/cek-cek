@@ -32,8 +32,9 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   Akun hasil impor bertanda "impor" dan bisa dikeluarkan sekaligus lewat **Batalkan impor**; mengesahkannya dengan ✅
   menjadikannya akun sah biasa.
 - Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
-- Tombol **💬 Balas sah** di bid mengirim balasan ke komentar bidder di Instagram (bawaan: "bid [total] sah yaa", bisa
-  diedit sebelum terkirim). Bid yang sudah dibalas bertanda "✓ Sudah dibalas".
+- Tombol **💬 Balas sah** muncul hanya di bid berawalan "+" (mis. +50) yang sudah disahkan (✅ atau "Disahkan otomatis").
+  Menekannya mengirim balasan ke komentar bidder di Instagram (bawaan: "bid [total] sah yaa", bisa diedit sebelum
+  terkirim). Bid yang sudah dibalas bertanda "✓ Sudah dibalas".
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
 - Sniper Zone hanya aktif kalau lelang itu punya minimal 2 bid sah sebelum zonanya dimulai. Kalau kurang, komentar

@@ -126,6 +126,7 @@ test('bid dari akun sah disahkan otomatis', () => {
     { ...rules, verified: new Set(['a', 'b']) },
   );
   assert.deepEqual(rows.map((r) => r.autoApproved), [true, false, true, false, false, false, false]);
+  assert.deepEqual(rows.map((r) => r.relative), [false, false, true, true, true, true, false]);
   assert.deepEqual(rows[1].flags, ['tidakNaik']);
   assert.equal(rows[3].valid, true); // bukan akun sah: tetap dihitung sementara, tapi belum dicek
 });

@@ -37,6 +37,7 @@ export type BidRow = CommentIn & {
   own: boolean;
   verified: boolean;
   imported: boolean;
+  relative: boolean; // bid ditulis dengan awalan "+" (mis. +50), jadi totalnya hasil hitungan sistem
   autoApproved: boolean; // disahkan otomatis: akun ada di daftar akun sah dan bid-nya tidak kena penanda apa pun
   isBid: boolean;
   amount: number | null;
@@ -63,7 +64,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
     const p = own ? null : parseBid(c.text);
     if (!p) {
-      rows.push({ ...c, own, verified: false, imported: false, autoApproved: false, isBid: false, amount: null, flags: [], valid: false });
+      rows.push({ ...c, own, verified: false, imported: false, relative: false, autoApproved: false, isBid: false, amount: null, flags: [], valid: false });
       continue;
     }
     const current: number | null = top ? top.amount : null;
@@ -91,7 +92,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     // Bid dari akun sah disahkan otomatis, kecuali kena penanda (sama atau lebih rendah dari bid sebelumnya, terhapus,
     // terlambat, di luar kelipatan, dan sebagainya) atau sudah kamu putuskan sendiri.
     const autoApproved = verified && !c.override && flags.length === 0 && valid;
-    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), autoApproved, isBid: true, amount, flags, valid };
+    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', autoApproved, isBid: true, amount, flags, valid };
     rows.push(row);
 
     if (valid) {

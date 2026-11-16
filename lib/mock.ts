@@ -35,6 +35,7 @@ function init(): Store {
     });
     let amount = 100;
     s.comments[id] = [];
+    if (i === 0) s.comments[id].push({ id: String(s.seq++), parentId: null, username: 'kolektor88', text: '+50', ts: now - 20 * 60_000 }); // contoh bid dengan +
     for (let k = 0; k < 2 + (i % 4); k++) {
       const ts = now - (40 - k * 9 - i) * 60_000;
       s.comments[id].push({ id: String(s.seq++), parentId: null, username: USERS[(i + k) % USERS.length], text: String(amount), ts });

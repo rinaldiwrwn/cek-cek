@@ -678,7 +678,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           )}
         </span>
         <span className="text">{r.text}</span>
-        {r.isBid && r.valid && !r.own && !r.deleted && (
+        {r.isBid && r.relative && (r.override === 'valid' || r.autoApproved) && !r.own && !r.deleted && (
           <button className="mini replybtn" onClick={reply} title="Kirim balasan ke komentar ini di Instagram">
             {r.repliedAt ? '✓ Sudah dibalas' : '💬 Balas sah'}
           </button>
