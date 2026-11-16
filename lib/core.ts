@@ -304,8 +304,8 @@ export async function setVerified(raw: string, on: boolean) {
 
 export async function setOverride(commentId: string, value: 'valid' | 'invalid' | 'wrong' | null) {
   const r = await q('UPDATE comments SET override = $2 WHERE id = $1 RETURNING username', [commentId, value]);
-  // Sah memasukkan akun ke daftar akun sah, Tolak mengeluarkannya. "Salah bid" hanya membatalkan bid ini.
-  if (r.length && (value === 'valid' || value === 'invalid')) await setVerified(r[0].username, value === 'valid');
+  // Sah memasukkan akun ke daftar akun sah. Tolak hanya membatalkan bid ini; daftar tidak berubah.
+  if (r.length && value === 'valid') await setVerified(r[0].username, true);
 }
 
 export async function getState() {
