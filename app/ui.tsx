@@ -5,7 +5,8 @@ import type { State } from '@/lib/core';
 
 type Post = State['posts'][number];
 type Row = Post['rows'][number];
-type Kind = 'sniper' | 'close';
+type Kind = 'ten' | 'sniper' | 'close';
+const KIND_LABEL: Record<Kind, string> = { ten: '10 Menit', sniper: 'Sniper Zone', close: 'Close' };
 
 const SNIPER_MS = 5 * 60_000;
 const WIB = 7 * 3_600_000;
@@ -156,7 +157,7 @@ export function Dashboard() {
         <button
           disabled={!withClose.length}
           onClick={async () => {
-            if (!allOn && !confirm(`Aktifkan komentar otomatis untuk ${withClose.length} lelang yang belum close?\n\nSniper Zone: "${state.texts.sniper}"\nClose: "${state.texts.close}"`)) return;
+            if (!allOn && !confirm(`Aktifkan komentar otomatis untuk ${withClose.length} lelang yang belum close?\n\n10 Menit: "${state.texts.ten}"\nSniper Zone: "${state.texts.sniper}"\nClose: "${state.texts.close}"`)) return;
             for (const p of withClose) await api('/api/action', { type: 'post', id: p.id, patch: { autoComment: !allOn } }).catch(() => {});
             refresh();
           }}
@@ -220,7 +221,7 @@ function phase(p: Post, now: number) {
 function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
   const e = p.events[kind];
   if (!e) return null;
-  const name = kind === 'sniper' ? 'Sniper Zone' : 'Close';
+  const name = KIND_LABEL[kind];
   let status = 'terjadwal';
   let tone = '';
   if (e.status === 'sent') [status, tone] = [`terkirim ${time(e.sentAt!)}`, 'ok'];
@@ -239,7 +240,7 @@ function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
 function EventSlot({ p, kind, now, act }: { p: Post; kind: Kind; now: number; act: (b: unknown) => Promise<void> }) {
   const e = p.events[kind];
   if (!e) return null;
-  const label = kind === 'sniper' ? 'Sniper Zone' : 'Close';
+  const label = KIND_LABEL[kind];
   return (
     <span className="slot">
       <EventChip p={p} kind={kind} now={now} />
@@ -274,6 +275,7 @@ function PostCard({ p, now, open, toggle, act }: { p: Post; now: number; open: b
       </button>
 
       <div className="chips">
+        <EventSlot p={p} kind="ten" now={now} act={act} />
         <EventSlot p={p} kind="sniper" now={now} act={act} />
         <EventSlot p={p} kind="close" now={now} act={act} />
         <label className="switch">
