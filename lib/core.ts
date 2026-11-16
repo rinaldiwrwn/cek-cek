@@ -241,6 +241,15 @@ async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
   await send(ev.post_id, ev.kind);
 }
 
+/** Mengembalikan komentar ke status terjadwal, mis. setelah uji kirim yang komentarnya sudah dihapus di Instagram. */
+export async function resetEvent(postId: string, kind: Kind) {
+  await q(
+    `UPDATE events SET status='pending', sent_at=NULL, comment_id=NULL, error=NULL
+     WHERE post_id=$1 AND kind=$2 AND status IN ('sent','failed','missed')`,
+    [postId, kind],
+  );
+}
+
 export async function sendNow(postId: string, kind: Kind) {
   const r = await q(
     `UPDATE events SET status='claimed', claimed_at=$3 WHERE post_id=$1 AND kind=$2 AND status IN ('pending','missed','failed') RETURNING kind`,
