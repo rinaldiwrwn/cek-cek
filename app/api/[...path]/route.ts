@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { getState, importVerified, listVerified, refresh, removeImported, replyToBid, setAutoReply, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
+import { addVerifiedMany, getState, importVerified, listVerified, refresh, removeImported, replyToBid, setAutoReply, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -34,7 +34,11 @@ async function action(req: Request) {
     else if (b.type === 'autoreply') await setAutoReply(!!b.on);
     else if (b.type === 'reply') await replyToBid(String(b.id), String(b.text), !!b.again);
     else if (b.type === 'verify' && typeof b.username === 'string') await setVerified(b.username, !!b.on);
-    else if (b.type === 'import' && Array.isArray(b.usernames)) {
+    else if (b.type === 'addmany' && typeof b.text === 'string') {
+      const r = await addVerifiedMany(b.text);
+      await syncAutoResults().catch(() => {});
+      return json({ ok: true, ...r });
+    } else if (b.type === 'import' && Array.isArray(b.usernames)) {
       const r = await importVerified(b.usernames);
       await syncAutoResults().catch(() => {});
       return json({ ok: true, ...r });

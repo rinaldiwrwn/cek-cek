@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractUsernames, parseBid, parseCaption } from '../lib/parse';
+import { extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
 import { autoReplyTargets, autoWinnerReason, evaluate, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
@@ -56,6 +56,13 @@ const c = (id: number, username: string, text: string, secBeforeClose: number, e
   id: String(id), parentId: null, username, text, ts: CLOSE - secBeforeClose * 1000, deleted: false, override: null, ...extra,
 });
 const rules = { openBid: 100, increment: 50, maxJump: 300, closeAt: CLOSE, ownUsername: 'lelang' };
+
+test('banyak username sekaligus', () => {
+  const r = splitUsernames('@Himalaya.auto, cos_jam_\nwarung_jam_second  nama salah!  himalaya.auto\n@x');
+  assert.deepEqual(r.valid, ['himalaya.auto', 'cos_jam_', 'warung_jam_second', 'nama', 'salah', 'x'].filter((u) => u !== 'salah'));
+  assert.deepEqual(r.invalid, ['salah!']);
+  assert.deepEqual(splitUsernames('').valid, []);
+});
 
 test('username dari file followers', () => {
   const lama = JSON.stringify([

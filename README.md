@@ -28,7 +28,8 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
 - Di lelang yang sudah close, **Tetapkan hasil lelang** mencatat pemenang (usulan: bid sah tertinggi) atau **No Winner**.
   Hasil bisa diubah kapan saja lewat **Ubah**, termasuk mencatat pemenang sebagai Bid & Run. Tombol **Pemenang**
   menampilkan rekap per akun: total win, total nilai, dan barang yang dimenangkan.
-- Panel Akun sah bisa mengimpor file followers dari "Download your information" Instagram (`followers_1.json` atau `.html`).
+- Panel Akun sah menerima banyak username sekaligus (pisahkan dengan spasi, koma, atau baris baru). Akun yang ditambahkan
+  begini berstatus akun sah biasa. Panel itu juga bisa mengimpor file followers dari "Download your information" Instagram (`followers_1.json` atau `.html`).
   Akun hasil impor bertanda "impor" dan bisa dikeluarkan sekaligus lewat **Batalkan impor**; mengesahkannya dengan ✅
   menjadikannya akun sah biasa.
 - Tombol **Akun sah** di bagian atas menampilkan seluruh daftar akun sah; akun bisa ditambah atau dikeluarkan dari sana.
