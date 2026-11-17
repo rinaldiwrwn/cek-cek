@@ -451,16 +451,23 @@ function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Pro
         onSubmit={async (e) => {
           e.preventDefault();
           if (!newUser.trim()) return;
-          await act({ type: 'verify', username: newUser, on: true });
-          setNewUser('');
-          load();
+          try {
+            const r = await api('/api/action', { type: 'addmany', text: newUser });
+            const parts = [`${r.added} akun ditambahkan`];
+            if (r.found - r.added > 0) parts.push(`${r.found - r.added} sudah ada di daftar${r.upgraded ? ` (${r.upgraded} dinaikkan dari impor menjadi akun sah biasa)` : ''}`);
+            if (r.invalid.length) parts.push(`${r.invalid.length} tidak valid dan dilewati: ${r.invalid.join(', ')}`);
+            setMsg(parts.join('. ') + '.');
+            if (!r.invalid.length) setNewUser('');
+            else setNewUser(r.invalid.join('\n'));
+            load();
+          } catch (err) {
+            setMsg(String((err as Error).message));
+          }
         }}
       >
-        <label htmlFor="newuser">Tambah akun ke daftar akun sah</label>
-        <span className="addrow">
-          <input id="newuser" type="text" placeholder="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={newUser} onChange={(e) => setNewUser(e.target.value)} />
-          <button className="primary" disabled={!newUser.trim()}>Tambah</button>
-        </span>
+        <label htmlFor="newuser">Tambah akun ke daftar akun sah (boleh banyak: pisahkan dengan spasi, koma, atau baris baru)</label>
+        <textarea id="newuser" className="textin" rows={4} placeholder="username1 username2&#10;@username3" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={newUser} onChange={(e) => setNewUser(e.target.value)} />
+        <button className="primary" disabled={!newUser.trim()}>Tambah</button>
       </form>
       <div>
         <label htmlFor="importfile">Impor dari file followers Instagram (followers_1.json atau .html)</label>

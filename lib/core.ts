@@ -1,7 +1,7 @@
 // Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
-import { cleanUsername, parseCaption } from './parse';
+import { cleanUsername, parseCaption, splitUsernames } from './parse';
 import { autoReplyTargets, autoWinnerReason, evaluate, SNIPER_MS, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -346,6 +346,30 @@ export async function importVerified(raw: unknown[]) {
     added += r.length;
   }
   return { found: names.length, added };
+}
+
+/**
+ * Menambahkan banyak akun sekaligus yang sudah kamu cek sendiri (mis. dari screenshot followers). Berbeda dari impor
+ * file, akun ini berstatus akun sah biasa, dan akun hasil impor yang ikut disebut dinaikkan menjadi akun sah biasa.
+ */
+export async function addVerifiedMany(text: string) {
+  const { valid, invalid } = splitUsernames(text);
+  if (valid.length > 2000) throw new Error('Terlalu banyak sekaligus (maksimal 2.000 username)');
+  let added = 0;
+  let upgraded = 0;
+  if (valid.length) {
+    const json = JSON.stringify(valid);
+    added = (await q(
+      `INSERT INTO bidders (username, verified_at, source)
+       SELECT jsonb_array_elements_text($1::jsonb), $2::timestamptz, 'manual' ON CONFLICT DO NOTHING RETURNING username`,
+      [json, iso(Date.now())],
+    )).length;
+    upgraded = (await q(
+      `UPDATE bidders SET source = 'manual' WHERE source = 'import' AND username IN (SELECT jsonb_array_elements_text($1::jsonb)) RETURNING username`,
+      [json],
+    )).length;
+  }
+  return { found: valid.length, added, upgraded, invalid };
 }
 
 /** Mengeluarkan semua akun hasil impor followers; akun yang kamu sahkan sendiri tidak ikut. */

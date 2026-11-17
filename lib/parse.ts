@@ -65,6 +65,18 @@ export const cleanUsername = (raw: string) => {
   return USERNAME.test(u) ? u : null;
 };
 
+/** Memecah teks berisi banyak username (dipisah spasi, koma, titik koma, atau baris baru) menjadi yang valid dan yang tidak. */
+export function splitUsernames(text: string) {
+  const valid = new Set<string>();
+  const invalid: string[] = [];
+  for (const tok of String(text || '').split(/[\s,;]+/).filter(Boolean)) {
+    const u = cleanUsername(tok);
+    if (u) valid.add(u);
+    else invalid.push(tok.slice(0, 40));
+  }
+  return { valid: [...valid], invalid };
+}
+
 /**
  * Mengambil username dari file daftar followers hasil "Download your information" Instagram
  * (JSON atau HTML), atau dari teks biasa berisi satu username per baris.
