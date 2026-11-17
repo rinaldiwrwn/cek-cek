@@ -38,6 +38,9 @@ code { font-size: 0.9em; background: var(--line); padding: 1px 5px; border-radiu
 .pad { padding: 24px 0; }
 
 header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.headright { display: flex; align-items: center; gap: 10px; flex: none; }
+.clock strong { white-space: nowrap; }
+.iconbtn { width: 40px; height: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 999px; flex: none; }
 .clock { text-align: right; line-height: 1.1; }
 .clock strong { display: block; font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
