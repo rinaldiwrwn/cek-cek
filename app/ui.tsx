@@ -163,9 +163,17 @@ export function Dashboard() {
           <h1>Lelang Monitor</h1>
           <p className="muted">{state.me ? `@${state.me}` : 'Akun belum terhubung'}{state.mock ? ' · mode demo' : ''}</p>
         </div>
-        <div className="clock" aria-label="Jam server WIB">
-          <strong>{now ? time(now) : '--:--:--'}</strong>
-          <span className="muted">WIB</span>
+        <div className="headright">
+          <div className="clock" aria-label="Jam server WIB">
+            <strong>{now ? time(now) : '--:--:--'}</strong>
+            <span className="muted">WIB</span>
+          </div>
+          <button className="iconbtn" onClick={() => location.reload()} aria-label="Muat ulang halaman" title="Muat ulang halaman (ambil versi terbaru)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </header>
 

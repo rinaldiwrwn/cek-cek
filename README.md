@@ -17,6 +17,7 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   bertanda "✓ Akun sah". **Tolak** hanya membatalkan bid itu dan tidak mengubah daftar. Akun hanya keluar dari daftar kalau
   kamu mengeluarkannya sendiri lewat panel Akun sah atau lewat tanda "✓ Akun sah" di bid-nya. Bid dari akun di luar daftar bertanda "Belum dicek".
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
+- Tombol ikon ⟳ di pojok kanan atas memuat ulang halaman, untuk mengambil versi dashboard terbaru setelah ada pembaruan.
 - Tombol **Aktivitas** menampilkan kejadian terbaru (bid dan komentar masuk, bid terhapus, komentar otomatis terkirim
   atau gagal) dan jumlah yang belum kamu lihat di browser itu.
 - Bid dari akun yang ada di daftar akun sah otomatis berstatus "Disahkan otomatis" (✅ menyala). Status itu tidak berlaku
