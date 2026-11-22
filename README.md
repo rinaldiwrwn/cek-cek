@@ -43,6 +43,13 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   dan hanya kalau totalnya pasti: bid acuan yang menjadi dasar penjumlahan juga sudah disahkan (kalau acuannya dari akun
   yang belum dicek, balasan ditahan dan bid-nya bertanda "Total belum pasti"). Paling banyak 5 balasan per putaran dengan jeda, dan 40 balasan per jam (`AUTO_REPLY_MAX_PER_HOUR`). Balasan yang gagal
   tidak dicoba lagi dan bisa dibalas manual. Teksnya bisa diganti lewat `AUTO_REPLY_TEXT` (pakai `{total}`).
+- **DM ke pemenang** lewat "Private Reply" pada komentar bid pemenang (satu DM per komentar, dalam 7 hari). Tombol
+  **✉ Kirim DM** di hasil lelang mengirim manual (teks bisa diedit). **Auto-DM pemenang** (mati bawaan) mengirim sendiri
+  "Menang yaa untuk lelang yang ini 🥳" sekitar 3 menit setelah pemenang ditetapkan, hanya kalau bid kemenangannya sudah
+  disahkan (akun sah otomatis atau ✅ manual) dan tidak melanggar aturan lelang (terlambat, bukan kelipatan, sniper zone,
+  lewat max jump, terhapus, dan sebagainya). Hanya lelang yang close setelah dinyalakan; mengubah hasil lelang selama
+  masa tenang membatalkan DM yang belum terkirim; yang gagal tidak dicoba lagi otomatis. Butuh izin pesan di token
+  (`instagram_manage_messages`) dan "Allow access to messages" di pengaturan Instagram.
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
 - Sniper Zone hanya aktif kalau lelang itu punya minimal 2 bid sah sebelum zonanya dimulai. Kalau kurang, komentar
