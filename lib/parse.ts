@@ -128,3 +128,11 @@ export function parseBid(text: string): ParsedBid | null {
   // "Yakin" kalau selain angka hanya ada embel-embel lazim; kalau ada kata lain, perlu dicek.
   return { kind: rel ? 'rel' : 'abs', value, sure: !hasWords(t.replace(m[0], ' ')) };
 }
+
+/**
+ * Menulis nominal (dalam ribuan rupiah) seperti yang biasa kamu tulis di komentar: di bawah satu juta memakai "rb"
+ * (250 -> 250rb), sejuta ke atas memakai "k" (1500 -> 1.500k, yaitu Rp1.500.000).
+ */
+export function amountText(rb: number) {
+  return rb >= 1000 ? `${rb.toLocaleString('id-ID')}k` : `${rb}rb`;
+}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
-import { extractUsernames } from '@/lib/parse';
+import { amountText, extractUsernames } from '@/lib/parse';
 
 type Post = State['posts'][number];
 type Row = Post['rows'][number];
@@ -15,7 +15,8 @@ const WIB = 7 * 3_600_000;
 const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const dateFmt = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'short', day: 'numeric', month: 'short' });
 const time = (ms: number) => timeFmt.format(ms);
-const rb = (n: number | null) => (n == null ? '–' : `${n.toLocaleString('id-ID')}rb`);
+// Nominal di dashboard memakai penulisan yang sama dengan pesan: 250rb di bawah sejuta, 1.500k untuk sejuta ke atas.
+const rb = (n: number | null) => (n == null ? '–' : amountText(n));
 const toInput = (ms: number | null) => (ms == null ? '' : new Date(ms + WIB).toISOString().slice(0, 19));
 const fromInput = (s: string) => (s ? Date.parse(`${s.length === 16 ? `${s}:00` : s}Z`) - WIB : null);
 
@@ -255,6 +256,16 @@ export function Dashboard() {
         >
           Auto-balas bid +: {state.autoReply.on ? 'nyala' : 'mati'}
         </button>
+        <button
+          className={state.autoDm.on ? 'on-switch' : ''}
+          aria-pressed={state.autoDm.on}
+          onClick={() => {
+            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]') + '" sekitar 3 menit kemudian, hanya kalau bid kemenangannya sudah disahkan dan tidak melanggar aturan lelang. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
+            act({ type: 'autodm', on: !state.autoDm.on });
+          }}
+        >
+          Auto-DM pemenang: {state.autoDm.on ? 'nyala' : 'mati'}
+        </button>
         <button className={freshBid ? 'attn' : ''} aria-expanded={feedView === 'bid'} onClick={() => toggleFeed('bid')}>
           Notif bid{freshBid ? ` (${freshBid} baru)` : ''}
         </button>
@@ -342,6 +353,12 @@ function buildFeed(state: State): FeedItem[] {
       else if (e.status === 'missed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} tidak terkirim`, 'bad', 'auto');
       else if (e.status === 'skipped') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} dilewati${e.error ? ` (${e.error})` : ''}`, 'chat', 'auto');
     }
+  }
+  for (const r of state.results) {
+    if (r.status !== 'winner' || !r.dm) continue;
+    const base = { postId: r.postId, title: r.title, kind: 'auto' as const };
+    if (r.dm.status === 'sent' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang terkirim ke @${r.dm.username}${r.dm.auto ? ' (otomatis)' : ''}`, tone: 'ok' });
+    else if (r.dm.status === 'failed' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang ke @${r.dm.username} GAGAL${r.dm.error ? `: ${r.dm.error}` : ''}`, tone: 'bad' });
   }
   return out.sort((a, b) => b.t - a.t);
 }
@@ -585,6 +602,28 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
         <strong>{result.status === 'winner' ? `🏆 @${result.username} · ${rb(result.amount)}` : 'No Winner'}</strong>
         {result.note && <span className="small">{result.note}</span>}
         {result.auto && <span className="muted small">Ditetapkan sistem. Tekan Ubah kalau perlu diganti.</span>}
+        {result.status === 'winner' && result.dm?.status === 'sent' && result.dm.username === result.username && (
+          <span className="small won">✉ DM terkirim {time(result.dm.at!)}{result.dm.auto ? ' (otomatis)' : ''}</span>
+        )}
+        {result.status === 'winner' && result.dm?.status === 'sent' && result.dm.username !== result.username && (
+          <span className="small warnline">⚠ DM sudah terkirim ke @{result.dm.username}, tapi pemenangnya sekarang @{result.username}. DM tidak bisa ditarik kembali.</span>
+        )}
+        {result.status === 'winner' && result.dm?.status === 'failed' && (
+          <span className="small warnline" title={result.dm.error || undefined}>⚠ DM ke @{result.dm.username} gagal{result.dm.error ? `: ${result.dm.error}` : ''}</span>
+        )}
+        {result.status === 'winner' && result.dm?.status === 'sending' && <span className="muted small">DM sedang dikirim…</span>}
+        {result.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && (
+          <button
+            className="mini dmbtn"
+            onClick={async () => {
+              const text = prompt(`Kirim DM ke @${result.username} lewat komentar bid-nya di Instagram (teks bisa diedit, OK untuk mengirim):`, result.dmText);
+              if (!text || !text.trim()) return;
+              await act({ type: 'dm', id: p.id, text: text.trim() });
+            }}
+          >
+            ✉ Kirim DM
+          </button>
+        )}
       </span>
       <button className="mini" aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? 'Batal' : 'Ubah'}</button>
     </div>
@@ -649,7 +688,7 @@ function Winners({ results }: { results: Result[] }) {
                   <td>
                     <ul>
                       {list.map((r) => (
-                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}{r.auto ? ' · otomatis' : r.note ? ` · ${r.note}` : ''}</span></li>
+                        <li key={r.postId}>{r.title} <span className="muted small">· {rb(r.amount)}{r.closeAt ? ` · ${dateFmt.format(r.closeAt)}` : ''}{r.auto ? ' · otomatis' : r.note ? ` · ${r.note}` : ''}{r.dm?.status === 'sent' && r.dm.username === r.username ? ' · DM terkirim' : ''}</span></li>
                       ))}
                     </ul>
                   </td>
@@ -726,7 +765,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
   const reply = async () => {
     const thread = r.parentId ? `@${r.username} ` : '';
     const warn = r.solid ? '' : '\n\nPERHATIAN: total ini bergantung pada bid sebelumnya yang belum kamu cek. Kalau bid itu nanti kamu tolak, total ini berubah.';
-    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):${warn}`, `${thread}bid ${rb(r.amount)} sah yaa`);
+    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):${warn}`, `${thread}bid ${r.amount == null ? '' : amountText(r.amount)} sah yaa`);
     if (!text || !text.trim()) return;
     if (r.repliedAt && !confirm('Komentar ini sudah pernah kamu balas. Kirim balasan lagi?')) return;
     await act({ type: 'reply', id: r.id, text: text.trim(), again: !!r.repliedAt });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
-import { autoReplyTargets, autoWinnerReason, evaluate, type CommentIn } from '../lib/bids';
+import { amountText, extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
+import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, winnerBidForDm, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
 Mohon 𝗕𝗔𝗖𝗔 𝗗𝗘𝗦𝗞𝗥𝗜𝗣𝗦𝗜
@@ -186,6 +186,44 @@ test('total bid + yang bergantung pada bid belum dicek tidak dibalas otomatis', 
   // Acuannya angka biasa dari akun yang belum dicek juga membuat totalnya belum pasti.
   const abs = evaluate([c(1, 'u', '100', 3600), c(2, 'a', '+50', 3300)], v).rows;
   assert.equal(abs[1].solid, false);
+});
+
+test('penulisan nominal: rb di bawah sejuta, k untuk sejuta ke atas', () => {
+  assert.equal(amountText(50), '50rb');
+  assert.equal(amountText(250), '250rb');
+  assert.equal(amountText(999), '999rb');
+  assert.equal(amountText(1000), '1.000k'); // Rp1.000.000
+  assert.equal(amountText(1500), '1.500k'); // Rp1.500.000
+  assert.equal(amountText(12500), '12.500k'); // Rp12.500.000
+});
+
+test('isi DM pemenang memuat nama barang dan harga menang', () => {
+  assert.equal(dmMessage(DM_TEMPLATE, 'Disney Mickey Mouse By Sega Quartz Watch', 250), 'Menang yaa untuk lelang Disney Mickey Mouse By Sega Quartz Watch di harga 250rb 🥳');
+  assert.equal(dmMessage(DM_TEMPLATE, 'Seiko 5', 1500), 'Menang yaa untuk lelang Seiko 5 di harga 1.500k 🥳');
+  assert.equal(dmMessage(DM_TEMPLATE, '', 100), 'Menang yaa untuk lelang ini di harga 100rb 🥳');
+  assert.equal(dmMessage('{harga} untuk {barang}, {barang}!', 'Jam A', 50), '50rb untuk Jam A, Jam A!');
+});
+
+test('DM pemenang hanya untuk bid yang disahkan dan tidak melanggar aturan', () => {
+  const v = { ...rules, verified: new Set(['a', 'b']) };
+  const win = (cs: CommentIn[], user: string, amount: number) => winnerBidForDm(evaluate(cs, v).rows, { username: user, amount })?.id ?? null;
+
+  // akun sah, bid bersih: boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500)], 'b', 150), '2');
+  // akun belum dicek (bid tetap dihitung sementara): tidak boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'u', '150', 3500)], 'u', 150), null);
+  // akun belum dicek tapi kamu sahkan manual: boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'u', '150', 3500, { override: 'valid' })], 'u', 150), '2');
+  // kamu sahkan manual, tapi bid melanggar kelipatan: tidak boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'u', '120', 3500, { override: 'valid' })], 'u', 120), null);
+  // terlambat (setelah close), meski disahkan manual: tidak boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'a', '150', -2, { override: 'valid' })], 'a', 150), null);
+  // bid terhapus: tidak boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500, { deleted: true })], 'b', 150), null);
+  // sniper zone aktif (2 bid sah sebelumnya), akun baru bid di 5 menit terakhir: tidak boleh
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500), c(3, 'u', '200', 100, { override: 'valid' })], 'u', 200), null);
+  // nominal tidak sama dengan hasil lelang: tidak ada bid yang cocok
+  assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500)], 'b', 200), null);
 });
 
 test('pemenang bawaan', () => {

@@ -165,6 +165,22 @@ export async function listComments(mediaId: string): Promise<IgComment[]> {
   return out;
 }
 
+/**
+ * DM ke orang yang berkomentar lewat "Private Reply": satu pesan per komentar, dalam 7 hari sejak komentar dibuat.
+ * Jalurnya memakai ID akun Instagram; kalau Meta meminta ID Halaman, isi IG_MESSAGES_ID.
+ */
+export async function sendPrivateReply(commentId: string, text: string): Promise<string> {
+  if (isMock()) return mock.sendPrivateReply(commentId, text);
+  const a = await account();
+  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  const j = await request(`${a.base}${ver()}/${id}/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text } }),
+  });
+  return String(j.message_id ?? j.id ?? '');
+}
+
 /** Membalas sebuah komentar (harus komentar tingkat atas; balasan atas balasan tidak didukung Instagram). */
 export async function postReply(commentId: string, message: string): Promise<string> {
   if (isMock()) return mock.postReply(commentId, message);

@@ -1,4 +1,4 @@
-import { parseBid } from './parse';
+import { parseBid, amountText } from './parse';
 
 export const SNIPER_MS = 5 * 60_000;
 
@@ -137,4 +137,28 @@ export function autoReplyTargets(rows: BidRow[], o: { since: number; now: number
       r.isBid && r.relative && r.autoApproved && r.solid && !r.own && !r.deleted && r.amount != null &&
       !r.repliedAt && !r.replyFailedAt && r.ts >= o.since && r.ts >= o.now - o.maxAgeMs,
   );
+}
+
+/**
+ * Bid pemenang yang boleh memicu DM otomatis: milik pemenang, nominalnya sama dengan hasil lelang, sudah disahkan
+ * (akun sah otomatis, atau kamu sahkan manual), dan tidak melanggar aturan lelang (terlambat, di luar kelipatan,
+ * sniper zone tanpa bid sebelumnya, lewat max jump, tidak lebih tinggi, terhapus, dan sebagainya).
+ * Mengembalikan bid terbarunya, atau null kalau tidak ada yang memenuhi syarat.
+ */
+export function winnerBidForDm(rows: BidRow[], winner: { username: string; amount: number | null }): BidRow | null {
+  const ok = rows.filter(
+    (r) =>
+      r.isBid && !r.own && r.valid && r.username === winner.username && r.amount === winner.amount &&
+      (r.override === 'valid' || r.autoApproved) && r.flags.every((f) => SOFT.includes(f)),
+  );
+  return ok.sort((a, b) => b.ts - a.ts)[0] ?? null;
+}
+
+export const DM_TEMPLATE = 'Menang yaa untuk lelang {barang} di harga {harga} 🥳';
+
+/** Mengisi template DM pemenang: {barang} dengan nama barang/jam lelangnya, {harga} dengan harga menang (dalam ribuan). */
+export function dmMessage(template: string, title: string | null | undefined, amountRb: number | null | undefined) {
+  const barang = String(title || '').trim() || 'ini';
+  const harga = amountRb == null ? '' : amountText(amountRb);
+  return template.replace(/\{barang\}/g, barang).replace(/\{harga\}/g, harga);
 }

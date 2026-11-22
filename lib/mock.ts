@@ -9,7 +9,7 @@ const WATCHES = [
 ];
 const USERS = ['budi.watch', 'arloji_sby', 'kolektor88', 'dimas_r', 'tono.jam', 'hunter_seiko'];
 
-type Store = { media: Media[]; comments: Record<string, IgComment[]>; seq: number; removed: boolean; calls: Record<string, number> };
+type Store = { media: Media[]; comments: Record<string, IgComment[]>; seq: number; removed: boolean; calls: Record<string, number>; dms: { commentId: string; text: string }[] };
 const g = globalThis as unknown as { __lmMock?: Store };
 
 const wib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString();
@@ -17,7 +17,7 @@ const wib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString();
 function init(): Store {
   const now = Date.now();
   const first = Math.ceil((now + 7 * 60_000) / 60_000) * 60_000;
-  const s: Store = { media: [], comments: {}, seq: 1, removed: false, calls: {} };
+  const s: Store = { media: [], comments: {}, seq: 1, removed: false, calls: {}, dms: [] };
   WATCHES.forEach((name, i) => {
     const close = wib(first + i * 5 * 60_000);
     const [y, mo, d] = close.slice(0, 10).split('-');
@@ -66,6 +66,15 @@ export function listComments(mediaId: string): IgComment[] {
     s.removed = true;
   }
   return [...list];
+}
+
+/** Meniru aturan Instagram: komentarnya harus ada, dan hanya satu DM per komentar. */
+export function sendPrivateReply(commentId: string, text: string): string {
+  const s = store();
+  if (!Object.values(s.comments).some((l) => l.some((c) => c.id === commentId))) throw new Error('Instagram: komentar tidak ditemukan');
+  if (s.dms.some((d) => d.commentId === commentId)) throw new Error('Instagram: sudah ada DM untuk komentar ini');
+  s.dms.push({ commentId, text });
+  return `dm${s.seq++}`;
 }
 
 export function postReply(commentId: string, message: string): string {

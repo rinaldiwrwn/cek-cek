@@ -29,6 +29,12 @@ const SCHEMA = [
   `ALTER TABLE bidders ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual'`,
   // Balasan yang kamu kirim ke komentar bidder dari dashboard.
   `ALTER TABLE comments ADD COLUMN IF NOT EXISTS replied_at timestamptz`,
+  // DM ke pemenang: dm_status 'sending' | 'sent' | 'failed', dm_username = penerimanya.
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_status text`,
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_username text`,
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_at timestamptz`,
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_error text`,
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_auto boolean NOT NULL DEFAULT false`,
   `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_text text`,
   `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_auto boolean NOT NULL DEFAULT false`,
   `ALTER TABLE comments ADD COLUMN IF NOT EXISTS reply_failed_at timestamptz`,
