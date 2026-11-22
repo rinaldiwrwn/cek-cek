@@ -141,7 +141,8 @@ export function autoReplyTargets(rows: BidRow[], o: { since: number; now: number
 
 /**
  * Bid pemenang yang boleh memicu DM otomatis: milik pemenang, nominalnya sama dengan hasil lelang, sudah disahkan
- * (akun sah otomatis, atau kamu sahkan manual), dan tidak melanggar aturan lelang (terlambat, di luar kelipatan,
+ * (akun sah otomatis, atau kamu sahkan manual), harganya pasti (kalau berawalan "+", bid acuannya juga sudah disahkan),
+ * dan tidak melanggar aturan lelang (terlambat, di luar kelipatan,
  * sniper zone tanpa bid sebelumnya, lewat max jump, tidak lebih tinggi, terhapus, dan sebagainya).
  * Mengembalikan bid terbarunya, atau null kalau tidak ada yang memenuhi syarat.
  */
@@ -149,7 +150,7 @@ export function winnerBidForDm(rows: BidRow[], winner: { username: string; amoun
   const ok = rows.filter(
     (r) =>
       r.isBid && !r.own && r.valid && r.username === winner.username && r.amount === winner.amount &&
-      (r.override === 'valid' || r.autoApproved) && r.flags.every((f) => SOFT.includes(f)),
+      (r.override === 'valid' || r.autoApproved) && r.solid && r.flags.every((f) => SOFT.includes(f)),
   );
   return ok.sort((a, b) => b.ts - a.ts)[0] ?? null;
 }

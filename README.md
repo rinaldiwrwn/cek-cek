@@ -45,7 +45,7 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   tidak dicoba lagi dan bisa dibalas manual. Teksnya bisa diganti lewat `AUTO_REPLY_TEXT` (pakai `{total}`).
 - **DM ke pemenang** lewat "Private Reply" pada komentar bid pemenang (satu DM per komentar, dalam 7 hari). Tombol
   **✉ Kirim DM** di hasil lelang mengirim manual (teks bisa diedit). **Auto-DM pemenang** (mati bawaan) mengirim sendiri
-  "Menang yaa untuk lelang [nama barang] di harga [harga menang] 🥳" (harga ditulis `250rb` di bawah sejuta dan `1.500k` untuk sejuta ke atas; tampilan nominal di dashboard memakai aturan yang sama) sekitar 3 menit setelah pemenang ditetapkan, hanya kalau bid kemenangannya sudah
+  "Menang yaa untuk lelang [nama barang] di harga [harga menang] 🥳" (harga ditulis `250rb` di bawah sejuta dan `1.500k` untuk sejuta ke atas; tampilan nominal di dashboard memakai aturan yang sama) sekitar 10 detik setelah pemenang ditetapkan (`AUTO_DM_DELAY_SEC`, `0` untuk langsung), hanya kalau bid kemenangannya sudah
   disahkan (akun sah otomatis atau ✅ manual) dan tidak melanggar aturan lelang (terlambat, bukan kelipatan, sniper zone,
   lewat max jump, terhapus, dan sebagainya). Hanya lelang yang close setelah dinyalakan; mengubah hasil lelang selama
   masa tenang membatalkan DM yang belum terkirim; yang gagal tidak dicoba lagi otomatis. Butuh izin pesan di token

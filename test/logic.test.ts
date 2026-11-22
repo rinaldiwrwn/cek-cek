@@ -222,6 +222,10 @@ test('DM pemenang hanya untuk bid yang disahkan dan tidak melanggar aturan', () 
   assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500, { deleted: true })], 'b', 150), null);
   // sniper zone aktif (2 bid sah sebelumnya), akun baru bid di 5 menit terakhir: tidak boleh
   assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500), c(3, 'u', '200', 100, { override: 'valid' })], 'u', 200), null);
+  // harga bergantung pada bid belum dicek (akun sah +50 di atas bid akun belum dicek): tidak boleh sampai bid acuan disahkan
+  const rantai = [c(1, 'a', '100', 3600), c(2, 'u', '+50', 3500), c(3, 'b', '+50', 3400)];
+  assert.equal(win(rantai, 'b', 200), null);
+  assert.equal(win(rantai.map((x) => (x.id === '2' ? { ...x, override: 'valid' as const } : x)), 'b', 200), '3');
   // nominal tidak sama dengan hasil lelang: tidak ada bid yang cocok
   assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500)], 'b', 200), null);
 });

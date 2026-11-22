@@ -260,7 +260,7 @@ export function Dashboard() {
           className={state.autoDm.on ? 'on-switch' : ''}
           aria-pressed={state.autoDm.on}
           onClick={() => {
-            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]') + '" sekitar 3 menit kemudian, hanya kalau bid kemenangannya sudah disahkan dan tidak melanggar aturan lelang. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
+            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]') + '" sekitar ' + (state.dmDelaySec >= 60 ? `${Math.round(state.dmDelaySec / 60)} menit` : `${Math.round(state.dmDelaySec)} detik`) + ' kemudian, hanya kalau bid kemenangannya sudah disahkan, harganya pasti, dan tidak melanggar aturan lelang. Bid yang masih perlu kamu cek tidak memicu DM. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
             act({ type: 'autodm', on: !state.autoDm.on });
           }}
         >
@@ -473,6 +473,13 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
         <EventSlot p={p} kind="ten" now={now} act={act} />
         <EventSlot p={p} kind="sniper" now={now} act={act} />
         <EventSlot p={p} kind="close" now={now} act={act} />
+        {result?.status === 'winner' && result.dm?.status === 'sent' && result.dm.username === result.username && (
+          <span className="chip ok">✉ DM terkirim {time(result.dm.at!)}{result.dm.auto ? ' (otomatis)' : ''}</span>
+        )}
+        {result?.status === 'winner' && result.dm?.status === 'failed' && <span className="chip bad" title={result.dm.error || undefined}>✉ DM gagal</span>}
+        {result?.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && result.dm?.status !== 'sending' && (
+          <button className="mini" onClick={() => askAndSendDm(p.id, result, act)} title={`Kirim DM ke @${result.username}`}>✉ Kirim DM</button>
+        )}
         <label className="switch">
           <input type="checkbox" checked={p.autoComment} disabled={p.closeAt == null} onChange={(e) => act({ type: 'post', id: p.id, patch: { autoComment: e.target.checked } })} />
           Auto-komentar
@@ -484,6 +491,13 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
 }
 
 type Result = State['results'][number];
+
+/** Kotak konfirmasi kirim DM ke pemenang (teks bisa diedit), dipakai di kartu dan di detail lelang. */
+async function askAndSendDm(postId: string, result: Result, act: (b: unknown) => Promise<void>) {
+  const text = prompt(`Kirim DM ke @${result.username} lewat komentar bid-nya di Instagram (teks bisa diedit, OK untuk mengirim):`, result.dmText);
+  if (!text || !text.trim()) return;
+  await act({ type: 'dm', id: postId, text: text.trim() });
+}
 
 /** Daftar akun sah: cari, tambah satu, impor dari file followers, dan keluarkan. Daftarnya dimuat saat panel dibuka. */
 function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Promise<void> }) {
@@ -615,11 +629,7 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
         {result.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && (
           <button
             className="mini dmbtn"
-            onClick={async () => {
-              const text = prompt(`Kirim DM ke @${result.username} lewat komentar bid-nya di Instagram (teks bisa diedit, OK untuk mengirim):`, result.dmText);
-              if (!text || !text.trim()) return;
-              await act({ type: 'dm', id: p.id, text: text.trim() });
-            }}
+            onClick={() => askAndSendDm(p.id, result, act)}
           >
             ✉ Kirim DM
           </button>
