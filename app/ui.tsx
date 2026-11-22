@@ -15,7 +15,8 @@ const WIB = 7 * 3_600_000;
 const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const dateFmt = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'short', day: 'numeric', month: 'short' });
 const time = (ms: number) => timeFmt.format(ms);
-const rb = (n: number | null) => (n == null ? '–' : `${n.toLocaleString('id-ID')}rb`);
+// Nominal di dashboard memakai penulisan yang sama dengan pesan: 250rb di bawah sejuta, 1.500k untuk sejuta ke atas.
+const rb = (n: number | null) => (n == null ? '–' : amountText(n));
 const toInput = (ms: number | null) => (ms == null ? '' : new Date(ms + WIB).toISOString().slice(0, 19));
 const fromInput = (s: string) => (s ? Date.parse(`${s.length === 16 ? `${s}:00` : s}Z`) - WIB : null);
 
