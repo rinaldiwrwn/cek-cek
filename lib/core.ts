@@ -315,6 +315,9 @@ export async function tick(loop: boolean) {
   for (;;) {
     const hot = await syncDuePosts().catch(() => false);
     await autoReplies().catch(noteError);
+    // Di sekitar close, pemenang bawaan dan DM-nya diproses tiap putaran, tidak menunggu putaran berakhir.
+    await syncAutoResults().catch(noteError);
+    await autoDms().catch(noteError);
     if (!loop || !hot || Date.now() - started > 50_000) break;
     await sleep(4_000);
   }
@@ -544,7 +547,7 @@ export async function autoReplies() {
 // ---------- DM ke pemenang ----------
 
 const dmTemplate = () => process.env.AUTO_DM_TEXT || DM_TEMPLATE;
-const AUTO_DM_DELAY = Math.max(0, Number(process.env.AUTO_DM_DELAY_MIN ?? 3)) * MIN; // masa tenang setelah pemenang ditetapkan
+const AUTO_DM_DELAY = Math.max(0, Number(process.env.AUTO_DM_DELAY_MIN ?? 1)) * MIN; // masa tenang setelah pemenang ditetapkan (bawaan 1 menit)
 const AUTO_DM_PER_TICK = 3;
 const DM_WINDOW = 6.9 * 24 * 60 * MIN; // Instagram: DM lewat komentar paling lambat 7 hari sejak komentar dibuat
 
@@ -704,6 +707,7 @@ export async function getState() {
     texts: texts(),
     autoReply,
     autoDm,
+    dmDelayMin: AUTO_DM_DELAY / MIN,
     dmTemplate: dmTemplate(),
     verifiedCount: Number(total[0]?.n ?? 0),
     results: results.map((r) => ({
