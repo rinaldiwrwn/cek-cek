@@ -95,24 +95,60 @@ export function Dashboard() {
   const [open, setOpen] = useState<string | null>(null);
   const [seq, setSeq] = useState<string | null>(null);
   const [showVerified, setShowVerified] = useState(false);
-  const [showFeed, setShowFeed] = useState(false);
+  const [feedView, setFeedView] = useState<'bid' | 'auto' | null>(null);
   const [showWinners, setShowWinners] = useState(false);
-  // Batas "sudah dilihat" disimpan di browser ini; aktivitas setelahnya ditandai baru.
-  const [seen, setSeen] = useState(0);
+  // Batas "sudah dilihat" disimpan di browser ini, terpisah untuk notifikasi bid dan notifikasi otomasi.
+  const [seenBid, setSeenBid] = useState(0);
+  const [seenAuto, setSeenAuto] = useState(0);
+  const [focus, setFocus] = useState<{ postId: string; rowId?: string; n: number } | null>(null);
   useEffect(() => {
-    let v = 0;
-    try {
-      v = Number(localStorage.getItem('lm_seen')) || 0;
-    } catch {}
-    setSeen(v || Date.now());
+    const read = (k: string) => {
+      try {
+        return Number(localStorage.getItem(`lm_seen_${k}`) || localStorage.getItem('lm_seen')) || 0;
+      } catch {
+        return 0;
+      }
+    };
+    setSeenBid(read('bid') || Date.now());
+    setSeenAuto(read('auto') || Date.now());
   }, []);
-  const markSeen = () => {
+  const markSeen = (kind: 'bid' | 'auto') => {
     const t = Date.now() + offset.current;
-    setSeen(t);
+    (kind === 'bid' ? setSeenBid : setSeenAuto)(t);
     try {
-      localStorage.setItem('lm_seen', String(t));
+      localStorage.setItem(`lm_seen_${kind}`, String(t));
     } catch {}
   };
+  const toggleFeed = (kind: 'bid' | 'auto') => {
+    if (feedView) markSeen(feedView);
+    setFeedView(feedView === kind ? null : kind);
+  };
+  // Mengetuk notifikasi: panel ditutup, lelangnya dibuka dan kartunya digulir ke layar, lalu bid-nya disorot.
+  const pick = (f: FeedItem) => {
+    markSeen(f.kind);
+    setFeedView(null);
+    setOpen(f.postId);
+    setFocus({ postId: f.postId, rowId: f.rowId, n: Date.now() });
+  };
+  useEffect(() => {
+    if (!focus) return;
+    const t1 = setTimeout(() => {
+      document.getElementById(`card-${focus.postId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
+    }, 80);
+    const t2 = setTimeout(() => {
+      const row = focus.rowId ? document.getElementById(`bid-${focus.rowId}`) : null;
+      if (!row) return;
+      row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      row.classList.remove('flash');
+      void row.offsetWidth; // memulai ulang animasi kalau disorot lagi
+      row.classList.add('flash');
+      setTimeout(() => row.classList.remove('flash'), 3000);
+    }, 650);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [focus]);
   const offset = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -151,8 +187,11 @@ export function Dashboard() {
 
   if (!state) return <main><p className="muted pad">{error || 'Memuat…'}</p></main>;
 
-  const feed = buildFeed(state).slice(0, 60);
-  const fresh = seen ? feed.filter((f) => f.t > seen).length : 0;
+  const allFeed = buildFeed(state);
+  const feedBid = allFeed.filter((f) => f.kind === 'bid').slice(0, 60);
+  const feedAuto = allFeed.filter((f) => f.kind === 'auto').slice(0, 60);
+  const freshBid = seenBid ? feedBid.filter((f) => f.t > seenBid).length : 0;
+  const freshAuto = seenAuto ? feedAuto.filter((f) => f.t > seenAuto).length : 0;
   const withClose = state.posts.filter((p) => p.closeAt != null && p.closeAt > now);
   const allOn = withClose.length > 0 && withClose.every((p) => p.autoComment);
 
@@ -216,15 +255,11 @@ export function Dashboard() {
         >
           Auto-balas bid +: {state.autoReply.on ? 'nyala' : 'mati'}
         </button>
-        <button
-          className={fresh ? 'attn' : ''}
-          aria-expanded={showFeed}
-          onClick={() => {
-            if (showFeed) markSeen();
-            setShowFeed(!showFeed);
-          }}
-        >
-          Aktivitas{fresh ? ` (${fresh} baru)` : ''}
+        <button className={freshBid ? 'attn' : ''} aria-expanded={feedView === 'bid'} onClick={() => toggleFeed('bid')}>
+          Notif bid{freshBid ? ` (${freshBid} baru)` : ''}
+        </button>
+        <button className={freshAuto ? 'attn' : ''} aria-expanded={feedView === 'auto'} onClick={() => toggleFeed('auto')}>
+          Notif otomasi{freshAuto ? ` (${freshAuto} baru)` : ''}
         </button>
         <button aria-expanded={showWinners} onClick={() => setShowWinners(!showWinners)}>
           Pemenang ({state.results.filter((r) => r.status === 'winner').length})
@@ -234,28 +269,8 @@ export function Dashboard() {
         </button>
       </div>
 
-      {showFeed && (
-        <section className="note feed">
-          <div className="rowhead">
-            <strong>Aktivitas terbaru</strong>
-            <button className="mini" onClick={markSeen} disabled={!fresh}>Tandai semua sudah dilihat</button>
-          </div>
-          {!feed.length && <p className="muted">Belum ada aktivitas.</p>}
-          <ul className="vlist">
-            {feed.map((f) => (
-              <li key={f.key} className={`${f.tone}${f.t > seen ? ' fresh' : ''}`}>
-                <button className="feeditem" onClick={() => setOpen(f.postId)}>
-                  <span className="when">{time(f.t)}</span>
-                  <span className="who">
-                    <span>{f.text}</span>
-                    <span className="muted small">{f.title}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {feedView === 'bid' && <FeedPanel title="Notifikasi bid" items={feedBid} seen={seenBid} onSeen={() => markSeen('bid')} onPick={pick} />}
+      {feedView === 'auto' && <FeedPanel title="Notifikasi otomasi komentar" items={feedAuto} seen={seenAuto} onSeen={() => markSeen('auto')} onPick={pick} />}
 
       {showWinners && <Winners results={state.results} />}
 
@@ -300,35 +315,63 @@ export function Dashboard() {
   );
 }
 
-type FeedItem = { key: string; t: number; postId: string; title: string; text: string; tone: string };
+type FeedItem = { key: string; t: number; postId: string; title: string; text: string; tone: string; kind: 'bid' | 'auto'; rowId?: string };
 
-/** Menyusun aktivitas dari data yang ada: bid dan komentar masuk, bid terhapus, dan komentar otomatis. */
+/** Menyusun notifikasi: kelompok "bid" (bid dan komentar masuk, bid terhapus) dan "auto" (komentar dan balasan otomatis). */
 function buildFeed(state: State): FeedItem[] {
   const out: FeedItem[] = [];
   for (const p of state.posts) {
-    const add = (key: string, t: number | null | undefined, text: string, tone = '') => {
-      if (t) out.push({ key: `${p.id}:${key}`, t, postId: p.id, title: p.title, text, tone });
+    const add = (key: string, t: number | null | undefined, text: string, tone = '', kind: 'bid' | 'auto' = 'bid', rowId?: string) => {
+      if (t) out.push({ key: `${p.id}:${key}`, t, postId: p.id, title: p.title, text, tone, kind, rowId });
     };
     for (const r of p.rows) {
       if (r.own) continue;
       if (r.isBid) {
         const hard = r.flags.filter((f) => !SOFT.includes(f)).map((f) => FLAGS[f]);
-        add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}` : ''}`, hard.length ? 'warn' : '');
-      } else add(`c${r.id}`, r.ts, `@${r.username}: ${r.text}`, 'chat');
-      if (r.deleted) add(`d${r.id}`, r.deletedAt, `@${r.username} menghapus ${r.isBid ? `bid ${rb(r.amount)}` : 'komentar'}`, 'bad');
-      if (r.repliedAuto && r.repliedAt) add(`ra${r.id}`, r.repliedAt, `Balasan otomatis terkirim ke @${r.username} (bid ${rb(r.amount)})`, 'ok');
-      if (r.replyFailedAt) add(`rf${r.id}`, r.replyFailedAt, `Balasan otomatis ke @${r.username} GAGAL${r.replyError ? `: ${r.replyError}` : ''}`, 'bad');
+        add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}` : ''}`, hard.length ? 'warn' : '', 'bid', r.id);
+      } else add(`c${r.id}`, r.ts, `@${r.username}: ${r.text}`, 'chat', 'bid', r.id);
+      if (r.deleted) add(`d${r.id}`, r.deletedAt, `@${r.username} menghapus ${r.isBid ? `bid ${rb(r.amount)}` : 'komentar'}`, 'bad', 'bid', r.id);
+      if (r.repliedAuto && r.repliedAt) add(`ra${r.id}`, r.repliedAt, `Balasan otomatis terkirim ke @${r.username} (bid ${rb(r.amount)})`, 'ok', 'auto', r.id);
+      if (r.replyFailedAt) add(`rf${r.id}`, r.replyFailedAt, `Balasan otomatis ke @${r.username} GAGAL${r.replyError ? `: ${r.replyError}` : ''}`, 'bad', 'auto', r.id);
     }
     for (const kind of ['ten', 'sniper', 'close'] as Kind[]) {
       const e = p.events[kind];
       if (!e) continue;
-      if (e.status === 'sent') add(`e${kind}`, e.sentAt, `Komentar ${KIND_LABEL[kind]} terkirim`, 'ok');
-      else if (e.status === 'failed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} GAGAL terkirim${e.error ? `: ${e.error}` : ''}`, 'bad');
-      else if (e.status === 'missed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} tidak terkirim`, 'bad');
-      else if (e.status === 'skipped') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} dilewati${e.error ? ` (${e.error})` : ''}`, 'chat');
+      if (e.status === 'sent') add(`e${kind}`, e.sentAt, `Komentar ${KIND_LABEL[kind]} terkirim`, 'ok', 'auto');
+      else if (e.status === 'failed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} GAGAL terkirim${e.error ? `: ${e.error}` : ''}`, 'bad', 'auto');
+      else if (e.status === 'missed') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} tidak terkirim`, 'bad', 'auto');
+      else if (e.status === 'skipped') add(`e${kind}`, e.dueAt, `Komentar ${KIND_LABEL[kind]} dilewati${e.error ? ` (${e.error})` : ''}`, 'chat', 'auto');
     }
   }
   return out.sort((a, b) => b.t - a.t);
+}
+
+/** Daftar notifikasi. Mengetuk satu baris membuka kartu lelangnya (dan menyorot bid-nya kalau ada). */
+function FeedPanel({ title, items, seen, onSeen, onPick }: { title: string; items: FeedItem[]; seen: number; onSeen: () => void; onPick: (f: FeedItem) => void }) {
+  const fresh = seen ? items.filter((f) => f.t > seen).length : 0;
+  return (
+    <section className="note feed">
+      <div className="rowhead">
+        <strong>{title}</strong>
+        <button className="mini" onClick={onSeen} disabled={!fresh}>Tandai semua sudah dilihat</button>
+      </div>
+      {!items.length && <p className="muted">Belum ada.</p>}
+      {items.length > 0 && <p className="muted small">Ketuk satu untuk membuka lelangnya.</p>}
+      <ul className="vlist">
+        {items.map((f) => (
+          <li key={f.key} className={`${f.tone}${f.t > seen ? ' fresh' : ''}`}>
+            <button className="feeditem" onClick={() => onPick(f)}>
+              <span className="when">{time(f.t)}</span>
+              <span className="who">
+                <span>{f.text}</span>
+                <span className="muted small">{f.title}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function phase(p: Post, now: number) {
@@ -393,7 +436,7 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
   // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
   const check = bids.filter((r) => !r.override && !r.autoApproved).length;
   return (
-    <li className={`post ${ph.key}${open ? ' open' : ''}`}>
+    <li id={`card-${p.id}`} className={`post ${ph.key}${open ? ' open' : ''}`}>
       <button className="summary" onClick={toggle} aria-expanded={open}>
         {p.thumb ? <img src={p.thumb} alt="" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} /> : <span className="thumb" />}
         <span className="info">
@@ -690,7 +733,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
   };
   const set = (value: 'valid' | 'invalid') => act({ type: 'override', id: r.id, value: r.override === value ? null : value });
   return (
-    <li className={`${r.isBid ? (r.valid ? 'valid' : 'invalid') : 'chat'}${top ? ' leader' : ''}`}>
+    <li id={`bid-${r.id}`} className={`${r.isBid ? (r.valid ? 'valid' : 'invalid') : 'chat'}${top ? ' leader' : ''}`}>
       <span className="when">{time(r.ts)}</span>
       <span className="who">
         <span className="user">

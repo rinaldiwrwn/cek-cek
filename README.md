@@ -18,8 +18,9 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   kamu mengeluarkannya sendiri lewat panel Akun sah atau lewat tanda "✓ Akun sah" di bid-nya. Bid dari akun di luar daftar bertanda "Belum dicek".
 - "Atur jam close berurutan" mengisi jam close 9 postingan terakhir sekaligus: postingan terlama di jam yang kamu pilih, berikutnya tiap 5 menit.
 - Tombol ikon ⟳ di pojok kanan atas memuat ulang halaman, untuk mengambil versi dashboard terbaru setelah ada pembaruan.
-- Tombol **Aktivitas** menampilkan kejadian terbaru (bid dan komentar masuk, bid terhapus, komentar otomatis terkirim
-  atau gagal) dan jumlah yang belum kamu lihat di browser itu.
+- Dua tombol notifikasi terpisah: **Notif bid** (bid dan komentar masuk, bid terhapus) dan **Notif otomasi** (komentar
+  terjadwal dan balasan otomatis: terkirim, gagal, dilewati), masing-masing dengan hitungan yang belum dilihat. Mengetuk
+  satu notifikasi membuka lelangnya, menggulir kartunya ke layar, dan menyorot bid-nya.
 - Bid dari akun yang ada di daftar akun sah otomatis berstatus "Disahkan otomatis" (✅ menyala). Status itu tidak berlaku
   kalau bid-nya kena penanda (sama atau lebih rendah dari bid sebelumnya, terhapus, terlambat, bukan kelipatan, lewat
   max jump, dan sebagainya), dan keputusan ✅ atau ❌ yang kamu tekan sendiri selalu menang.
