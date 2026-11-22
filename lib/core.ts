@@ -2,7 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { cleanUsername, parseCaption, splitUsernames } from './parse';
-import { autoReplyTargets, autoWinnerReason, evaluate, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
+import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
 const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
@@ -544,7 +544,7 @@ export async function autoReplies() {
 
 // ---------- DM ke pemenang ----------
 
-const DM_TEXT = () => process.env.AUTO_DM_TEXT || 'Menang yaa untuk lelang yang ini 🥳';
+const dmTemplate = () => process.env.AUTO_DM_TEXT || DM_TEMPLATE;
 const AUTO_DM_DELAY = Math.max(0, Number(process.env.AUTO_DM_DELAY_MIN ?? 3)) * MIN; // masa tenang setelah pemenang ditetapkan
 const AUTO_DM_PER_TICK = 3;
 const DM_WINDOW = 6.9 * 24 * 60 * MIN; // Instagram: DM lewat komentar paling lambat 7 hari sejak komentar dibuat
@@ -603,17 +603,18 @@ async function deliverDm(postId: string, username: string, comment: { id: string
 
 /** Kirim manual: untuk pemenang yang tidak memenuhi syarat DM otomatis, atau untuk mencoba pertama kali. */
 export async function sendWinnerDm(postId: string, text: string) {
-  const message = String(text || '').trim() || DM_TEXT();
+  const message = String(text || '').trim();
   if (message.length > 900) throw new Error('Pesan terlalu panjang');
   const res = (await q('SELECT * FROM results WHERE post_id = $1', [postId]))[0];
   if (!res || res.status !== 'winner') throw new Error('Belum ada pemenang yang ditetapkan');
+  const finalText = message || dmMessage(dmTemplate(), res.title, res.amount);
   const ev = await evalPost(postId);
   if (!ev) throw new Error('Lelang tidak ditemukan');
   const mine = ev.rows.filter((r) => !r.own && !r.deleted && r.username === res.username);
   // Utamakan bid dengan nominal kemenangan, lalu komentar terbaru dari pemenang itu.
   const pick = [...mine.filter((r) => r.isBid && r.amount === res.amount), ...mine].sort((a, b) => Number(b.isBid && b.amount === res.amount) - Number(a.isBid && a.amount === res.amount) || b.ts - a.ts)[0];
   if (!pick) throw new Error('Tidak ada komentar pemenang ini yang bisa dibalas lewat DM');
-  await deliverDm(postId, res.username, pick, message, false);
+  await deliverDm(postId, res.username, pick, finalText, false);
 }
 
 /**
@@ -640,7 +641,7 @@ export async function autoDms() {
     if (!bid) continue; // tidak memenuhi syarat: tidak ada DM otomatis, bisa dikirim manual
     budget--;
     try {
-      await deliverDm(res.post_id, res.username, bid, DM_TEXT(), true);
+      await deliverDm(res.post_id, res.username, bid, dmMessage(dmTemplate(), res.title, res.amount), true);
     } catch (e) {
       await noteError(`DM otomatis ke @${res.username} gagal: ${String((e as Error)?.message || e)}`);
     }
@@ -704,11 +705,12 @@ export async function getState() {
     texts: texts(),
     autoReply,
     autoDm,
+    dmTemplate: dmTemplate(),
     verifiedCount: Number(total[0]?.n ?? 0),
     results: results.map((r) => ({
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,
       amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null, auto: !!r.auto,
-      dmText: DM_TEXT(),
+      dmText: dmMessage(dmTemplate(), r.title, r.amount),
       dm: r.dm_status ? { status: r.dm_status as 'sending' | 'sent' | 'failed', username: r.dm_username as string | null, at: toMs(r.dm_at), error: r.dm_error as string | null, auto: !!r.dm_auto } : null,
     })),
     posts: posts.map((p) => {

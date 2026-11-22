@@ -153,3 +153,12 @@ export function winnerBidForDm(rows: BidRow[], winner: { username: string; amoun
   );
   return ok.sort((a, b) => b.ts - a.ts)[0] ?? null;
 }
+
+export const DM_TEMPLATE = 'Menang yaa untuk lelang {barang} di harga {harga} 🥳';
+
+/** Mengisi template DM pemenang: {barang} dengan nama barang/jam lelangnya, {harga} dengan harga menang (dalam ribuan). */
+export function dmMessage(template: string, title: string | null | undefined, amountRb: number | null | undefined) {
+  const barang = String(title || '').trim() || 'ini';
+  const harga = amountRb == null ? '' : `${amountRb.toLocaleString('id-ID')}rb`;
+  return template.replace(/\{barang\}/g, barang).replace(/\{harga\}/g, harga);
+}

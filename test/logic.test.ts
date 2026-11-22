@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
-import { autoReplyTargets, autoWinnerReason, evaluate, winnerBidForDm, type CommentIn } from '../lib/bids';
+import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, winnerBidForDm, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
 Mohon 𝗕𝗔𝗖𝗔 𝗗𝗘𝗦𝗞𝗥𝗜𝗣𝗦𝗜
@@ -186,6 +186,13 @@ test('total bid + yang bergantung pada bid belum dicek tidak dibalas otomatis', 
   // Acuannya angka biasa dari akun yang belum dicek juga membuat totalnya belum pasti.
   const abs = evaluate([c(1, 'u', '100', 3600), c(2, 'a', '+50', 3300)], v).rows;
   assert.equal(abs[1].solid, false);
+});
+
+test('isi DM pemenang memuat nama barang dan harga menang', () => {
+  assert.equal(dmMessage(DM_TEMPLATE, 'Disney Mickey Mouse By Sega Quartz Watch', 250), 'Menang yaa untuk lelang Disney Mickey Mouse By Sega Quartz Watch di harga 250rb 🥳');
+  assert.equal(dmMessage(DM_TEMPLATE, 'Seiko 5', 1500), 'Menang yaa untuk lelang Seiko 5 di harga 1.500rb 🥳');
+  assert.equal(dmMessage(DM_TEMPLATE, '', 100), 'Menang yaa untuk lelang ini di harga 100rb 🥳');
+  assert.equal(dmMessage('{harga} untuk {barang}, {barang}!', 'Jam A', 50), '50rb untuk Jam A, Jam A!');
 });
 
 test('DM pemenang hanya untuk bid yang disahkan dan tidak melanggar aturan', () => {

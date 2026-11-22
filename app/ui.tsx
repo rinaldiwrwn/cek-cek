@@ -259,7 +259,7 @@ export function Dashboard() {
           className={state.autoDm.on ? 'on-switch' : ''}
           aria-pressed={state.autoDm.on}
           onClick={() => {
-            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + (state.results[0]?.dmText || 'Menang yaa untuk lelang yang ini 🥳') + '" sekitar 3 menit kemudian, hanya kalau bid kemenangannya sudah disahkan dan tidak melanggar aturan lelang. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
+            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]') + '" sekitar 3 menit kemudian, hanya kalau bid kemenangannya sudah disahkan dan tidak melanggar aturan lelang. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
             act({ type: 'autodm', on: !state.autoDm.on });
           }}
         >
