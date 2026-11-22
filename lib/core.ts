@@ -547,7 +547,15 @@ export async function autoReplies() {
 // ---------- DM ke pemenang ----------
 
 const dmTemplate = () => process.env.AUTO_DM_TEXT || DM_TEMPLATE;
-const AUTO_DM_DELAY = Math.max(0, Number(process.env.AUTO_DM_DELAY_MIN ?? 1)) * MIN; // masa tenang setelah pemenang ditetapkan (bawaan 1 menit)
+// Masa tunggu setelah pemenang ditetapkan sebelum DM terkirim (bawaan 10 detik). Lelang sudah close, jadi bid sesudahnya
+// tidak sah; jedanya hanya memberi kesempatan terakhir bagi keputusan yang kamu ubah.
+const AUTO_DM_DELAY = (() => {
+  const sec = process.env.AUTO_DM_DELAY_SEC;
+  if (sec !== undefined && sec !== '') return Math.max(0, Number(sec) || 0) * 1000;
+  const min = process.env.AUTO_DM_DELAY_MIN;
+  if (min) return Math.max(0, Number(min) || 0) * MIN;
+  return 10_000;
+})();
 const AUTO_DM_PER_TICK = 3;
 const DM_WINDOW = 6.9 * 24 * 60 * MIN; // Instagram: DM lewat komentar paling lambat 7 hari sejak komentar dibuat
 
@@ -629,10 +637,10 @@ export async function autoDms() {
   if (!cfg.on || !cfg.since) return;
   const now = Date.now();
   const due = await q(
-    `SELECT * FROM results WHERE status = 'winner' AND close_at > $1 AND decided_at <= $2
+    `SELECT * FROM results WHERE status = 'winner' AND close_at > $1 AND close_at < $4 AND decided_at <= $2
        AND NOT ((COALESCE(dm_status, '') IN ('sent', 'failed') AND COALESCE(dm_username, '') = username)
              OR (COALESCE(dm_status, '') = 'sending' AND dm_at > $3))`,
-    [iso(cfg.since), iso(now - AUTO_DM_DELAY), iso(now - 5 * MIN)],
+    [iso(cfg.since), iso(now - AUTO_DM_DELAY), iso(now - 5 * MIN), iso(now)],
   );
   let budget = AUTO_DM_PER_TICK;
   for (const res of due) {
@@ -707,7 +715,7 @@ export async function getState() {
     texts: texts(),
     autoReply,
     autoDm,
-    dmDelayMin: AUTO_DM_DELAY / MIN,
+    dmDelaySec: AUTO_DM_DELAY / 1000,
     dmTemplate: dmTemplate(),
     verifiedCount: Number(total[0]?.n ?? 0),
     results: results.map((r) => ({
