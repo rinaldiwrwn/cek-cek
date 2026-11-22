@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
-import { extractUsernames } from '@/lib/parse';
+import { amountText, extractUsernames } from '@/lib/parse';
 
 type Post = State['posts'][number];
 type Row = Post['rows'][number];
@@ -764,7 +764,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
   const reply = async () => {
     const thread = r.parentId ? `@${r.username} ` : '';
     const warn = r.solid ? '' : '\n\nPERHATIAN: total ini bergantung pada bid sebelumnya yang belum kamu cek. Kalau bid itu nanti kamu tolak, total ini berubah.';
-    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):${warn}`, `${thread}bid ${rb(r.amount)} sah yaa`);
+    const text = prompt(`Balas komentar @${r.username} di Instagram (teks bisa diedit, OK untuk mengirim):${warn}`, `${thread}bid ${r.amount == null ? '' : amountText(r.amount)} sah yaa`);
     if (!text || !text.trim()) return;
     if (r.repliedAt && !confirm('Komentar ini sudah pernah kamu balas. Kirim balasan lagi?')) return;
     await act({ type: 'reply', id: r.id, text: text.trim(), again: !!r.repliedAt });

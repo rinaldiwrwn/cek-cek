@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
+import { amountText, extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
 import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, winnerBidForDm, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
@@ -188,9 +188,18 @@ test('total bid + yang bergantung pada bid belum dicek tidak dibalas otomatis', 
   assert.equal(abs[1].solid, false);
 });
 
+test('penulisan nominal: rb di bawah sejuta, k untuk sejuta ke atas', () => {
+  assert.equal(amountText(50), '50rb');
+  assert.equal(amountText(250), '250rb');
+  assert.equal(amountText(999), '999rb');
+  assert.equal(amountText(1000), '1.000k'); // Rp1.000.000
+  assert.equal(amountText(1500), '1.500k'); // Rp1.500.000
+  assert.equal(amountText(12500), '12.500k'); // Rp12.500.000
+});
+
 test('isi DM pemenang memuat nama barang dan harga menang', () => {
   assert.equal(dmMessage(DM_TEMPLATE, 'Disney Mickey Mouse By Sega Quartz Watch', 250), 'Menang yaa untuk lelang Disney Mickey Mouse By Sega Quartz Watch di harga 250rb 🥳');
-  assert.equal(dmMessage(DM_TEMPLATE, 'Seiko 5', 1500), 'Menang yaa untuk lelang Seiko 5 di harga 1.500rb 🥳');
+  assert.equal(dmMessage(DM_TEMPLATE, 'Seiko 5', 1500), 'Menang yaa untuk lelang Seiko 5 di harga 1.500k 🥳');
   assert.equal(dmMessage(DM_TEMPLATE, '', 100), 'Menang yaa untuk lelang ini di harga 100rb 🥳');
   assert.equal(dmMessage('{harga} untuk {barang}, {barang}!', 'Jam A', 50), '50rb untuk Jam A, Jam A!');
 });

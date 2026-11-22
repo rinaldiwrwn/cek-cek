@@ -1,7 +1,7 @@
 // Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
-import { cleanUsername, parseCaption, splitUsernames } from './parse';
+import { amountText, cleanUsername, parseCaption, splitUsernames } from './parse';
 import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -467,8 +467,7 @@ export async function replyToBid(commentId: string, text: string, again = false)
 const AUTO_REPLY_MAX_AGE = 15 * MIN; // bid yang lebih lama dari ini tidak dibalas otomatis
 const AUTO_REPLY_PER_TICK = 5; // paling banyak sekian balasan per putaran, diberi jeda
 const AUTO_REPLY_PER_HOUR = Math.max(1, Number(process.env.AUTO_REPLY_MAX_PER_HOUR ?? 40) || 40);
-const rbText = (n: number) => `${n.toLocaleString('id-ID')}rb`;
-const autoReplyText = (total: number) => (process.env.AUTO_REPLY_TEXT || 'bid {total} sah yaa').replace('{total}', rbText(total));
+const autoReplyText = (total: number) => (process.env.AUTO_REPLY_TEXT || 'bid {total} sah yaa').replace('{total}', amountText(total));
 
 export async function getAutoReply() {
   const v = await getKv<{ on: boolean; since: number }>('autoReply');
