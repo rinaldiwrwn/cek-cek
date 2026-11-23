@@ -339,7 +339,7 @@ function buildFeed(state: State): FeedItem[] {
       if (r.own) continue;
       if (r.isBid) {
         const hard = r.flags.filter((f) => !SOFT.includes(f)).map((f) => FLAGS[f]);
-        add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}` : ''}`, hard.length ? 'warn' : '', 'bid', r.id);
+        add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}${r.autoRejected ? ' · ditolak otomatis' : ''}` : ''}`, hard.length ? 'warn' : '', 'bid', r.id);
       } else add(`c${r.id}`, r.ts, `@${r.username}: ${r.text}`, 'chat', 'bid', r.id);
       if (r.deleted) add(`d${r.id}`, r.deletedAt, `@${r.username} menghapus ${r.isBid ? `bid ${rb(r.amount)}` : 'komentar'}`, 'bad', 'bid', r.id);
       if (r.repliedAuto && r.repliedAt) add(`ra${r.id}`, r.repliedAt, `Balasan otomatis terkirim ke @${r.username} (bid ${rb(r.amount)})`, 'ok', 'auto', r.id);
@@ -452,7 +452,8 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
   const ph = phase(p, now);
   const bids = p.rows.filter((r) => r.isBid);
   // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
-  const check = bids.filter((r) => !r.override && !r.autoApproved).length;
+  // Bid yang sudah otomatis ditolak (melanggar aturan) tidak perlu dicek lagi.
+  const check = bids.filter((r) => !r.override && !r.autoApproved && !r.autoRejected).length;
   return (
     <li id={`card-${p.id}`} className={`post ${ph.key}${open ? ' open' : ''}`}>
       <button className="summary" onClick={toggle} aria-expanded={open}>
@@ -810,7 +811,8 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
             {r.autoApproved && <span className="flag ok">Disahkan otomatis</span>}
             {r.relative && r.valid && !r.solid && <span className="flag soft" title="Totalnya dihitung dari bid sebelumnya yang belum kamu sahkan">Total belum pasti</span>}
             {r.replyFailedAt && <span className="flag" title={r.replyError || undefined}>Balasan otomatis gagal</span>}
-            {!r.override && !r.verified && <span className="flag soft">Belum dicek</span>}
+            {r.autoRejected && <span className="flag rejected">Ditolak otomatis</span>}
+            {!r.override && !r.verified && !r.autoRejected && <span className="flag soft">Belum dicek</span>}
             {r.flags.map((f) => <span key={f} className={`flag${SOFT.includes(f) ? ' soft' : ''}`}>{FLAGS[f]}</span>)}
           </span>
         )}
@@ -820,7 +822,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           <strong>{rb(r.amount)}</strong>
           <span className="decide">
             <button className={r.override === 'valid' || r.autoApproved ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid' || r.autoApproved}>✅</button>
-            <button className={r.override === 'invalid' || r.override === 'wrong' ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid ini tidak dihitung" aria-pressed={r.override === 'invalid'}>❌</button>
+            <button className={r.override === 'invalid' || r.override === 'wrong' || r.autoRejected ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid ini tidak dihitung" aria-pressed={r.override === 'invalid' || r.autoRejected}>❌</button>
           </span>
         </span>
       )}

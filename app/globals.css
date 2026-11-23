@@ -104,6 +104,7 @@ input[type='number'], input[type='password'], input[type='datetime-local'] { wid
 .flag.manual { background: var(--line); color: var(--ink); }
 button.on-switch { background: var(--ok-bg); color: var(--ok); border-color: transparent; font-weight: 600; }
 .replybtn { align-self: flex-start; margin-top: 4px; }
+.flag.rejected { background: var(--bad-bg); color: var(--bad); font-weight: 600; }
 .flag.ok { background: var(--ok-bg); color: var(--ok); }
 .amount { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
 .amount strong { font-variant-numeric: tabular-nums; }
