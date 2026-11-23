@@ -42,6 +42,7 @@ export type BidRow = CommentIn & {
   imported: boolean;
   relative: boolean; // bid ditulis dengan awalan "+" (mis. +50), jadi totalnya hasil hitungan sistem
   solid: boolean; // sudah pasti: bid ini disahkan, dan kalau berawalan "+", bid acuannya juga sudah pasti (rantai tanpa bid yang belum dicek)
+  autoRejected: boolean; // ditolak otomatis: melanggar aturan lelang (sama atau lebih rendah dari bid sebelumnya, terlambat, bukan kelipatan, terhapus, dan sebagainya) dan belum kamu putuskan
   autoApproved: boolean; // disahkan otomatis: akun ada di daftar akun sah dan bid-nya tidak kena penanda apa pun
   isBid: boolean;
   amount: number | null;
@@ -68,7 +69,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
     const p = own ? null : parseBid(c.text);
     if (!p) {
-      rows.push({ ...c, own, verified: false, imported: false, relative: false, solid: false, autoApproved: false, isBid: false, amount: null, flags: [], valid: false });
+      rows.push({ ...c, own, verified: false, imported: false, relative: false, solid: false, autoApproved: false, autoRejected: false, isBid: false, amount: null, flags: [], valid: false });
       continue;
     }
     const ref: BidRow | null = top; // bid acuan untuk bid berawalan "+"
@@ -101,7 +102,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     // nanti kamu tolak, totalnya berubah. Karena itu bid "+" baru dianggap pasti kalau seluruh rantai acuannya pasti.
     const approved = c.override === 'valid' || autoApproved;
     const solid = valid && approved && (p.kind !== 'rel' || !!ref?.solid);
-    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', solid, autoApproved, isBid: true, amount, flags, valid };
+    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', solid, autoApproved, autoRejected: !c.override && !valid, isBid: true, amount, flags, valid };
     rows.push(row);
 
     if (valid) {

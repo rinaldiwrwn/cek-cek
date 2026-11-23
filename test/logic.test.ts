@@ -119,6 +119,26 @@ test('Sniper Zone tidak aktif kalau bid sah kurang dari 2', () => {
   assert.deepEqual(tolak.rows[2].flags, []);
 });
 
+test('bid yang melanggar aturan ditolak otomatis dan tidak perlu dicek lagi', () => {
+  const v = { ...rules, maxJump: null, verified: new Set(['a']) }; // tanpa batas max jump supaya angkanya sederhana
+  const { rows } = evaluate(
+    [
+      c(1, 'a', '1100', 3600), // disahkan otomatis
+      c(2, 'a', '1100', 3500), // sama dengan bid sebelumnya: ditolak otomatis
+      c(3, 'u', '1050', 3400), // akun belum dicek, lebih rendah: ditolak otomatis
+      c(4, 'u', '1220', 3300), // bukan kelipatan: ditolak otomatis
+      c(5, 'u', '1150', 3200), // akun belum dicek, tidak melanggar: tetap perlu dicek
+      c(6, 'u', '1200', 3100, { override: 'valid' }), // keputusanmu menang: tidak ditolak otomatis
+      c(7, 'a', '1250', -5), // terlambat
+      c(8, 'a', '1300', 3000, { override: 'invalid' }), // sudah kamu tolak sendiri: bukan "otomatis"
+    ],
+    v,
+  );
+  const rej = Object.fromEntries(rows.map((r) => [r.id, r.autoRejected]));
+  assert.deepEqual(rej, { 1: false, 2: true, 3: true, 4: true, 5: false, 6: false, 7: true, 8: false });
+  assert.equal(rows.find((r) => r.id === '5')!.autoApproved, false); // tetap menunggu keputusanmu
+});
+
 test('bid dari akun sah disahkan otomatis', () => {
   const { rows } = evaluate(
     [
