@@ -50,6 +50,11 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   lewat max jump, terhapus, dan sebagainya). Hanya lelang yang close setelah dinyalakan; mengubah hasil lelang selama
   masa tenang membatalkan DM yang belum terkirim; yang gagal tidak dicoba lagi otomatis. Butuh izin pesan di token
   (`instagram_manage_messages`) dan "Allow access to messages" di pengaturan Instagram.
+- Komentar terjadwal dikirim sedikit lebih awal sebesar rata-rata lama permintaan ke Instagram (0,8 kali, diukur dari
+  pengiriman sebelumnya), supaya tayang di detiknya. Chip jadwal menampilkan jam tayang menurut Instagram ("tayang
+  18:59:59") kalau sudah terbaca, dan jam saat Instagram membalas permintaan ("terkirim") kalau belum.
+- Pemenang bawaan ditetapkan 15 detik setelah close (`AUTO_RESULT_GRACE_SEC`), menunggu komentar menit-menit terakhir
+  yang telat terbaca.
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
 - Sniper Zone hanya aktif kalau lelang itu punya minimal 2 bid sah sebelum zonanya dimulai. Kalau kurang, komentar

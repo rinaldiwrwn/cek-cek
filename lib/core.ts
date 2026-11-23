@@ -206,12 +206,27 @@ export async function refresh() {
 
 // ---------- Komentar terjadwal ----------
 
+// Lama permintaan kirim komentar ke Instagram (rata-rata bergerak). Komentar terjadwal dikirim lebih awal sebesar ini
+// supaya tayang tepat di detiknya, bukan satu-dua detik sesudahnya.
+const LEAD_FACTOR = 0.8;
+const postLead = async () => {
+  const v = await getKv<{ ms: number }>('postLatency').catch(() => null);
+  return Math.round(Math.min(4000, (v?.ms ?? 2000) * LEAD_FACTOR));
+};
+async function noteLatency(ms: number) {
+  if (!(ms >= 100 && ms <= 8000)) return;
+  const prev = await getKv<{ ms: number }>('postLatency').catch(() => null);
+  await setKv('postLatency', { ms: Math.round(prev ? prev.ms * 0.6 + ms * 0.4 : ms) }).catch(() => {});
+}
+
 async function send(postId: string, kind: Kind) {
   const message = texts()[kind];
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      const t0 = Date.now();
       const commentId = await ig.postComment(postId, message);
+      await noteLatency(Date.now() - t0);
       await q(`UPDATE events SET status='sent', sent_at=$3, comment_id=$4, error=NULL WHERE post_id=$1 AND kind=$2`, [postId, kind, iso(Date.now()), commentId]);
       return;
     } catch (e) {
@@ -243,7 +258,8 @@ async function countValidBids(postId: string) {
 async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
   const due = toMs(ev.due_at)!;
   const gated = ev.kind === 'sniper' && SNIPER_MIN_BIDS > 0;
-  await sleep(due - Date.now() - (gated ? 4000 : 1500));
+  const lead = await postLead();
+  await sleep(due - Date.now() - lead - (gated ? 4500 : 2000));
   // Cek ulang sesaat sebelum kirim: auto-komentar bisa saja dimatikan atau jamnya diubah.
   const r = await q(
     `SELECT e.status, e.due_at, p.auto_comment FROM events e JOIN posts p ON p.id = e.post_id WHERE e.post_id=$1 AND e.kind=$2`,
@@ -265,7 +281,8 @@ async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
       return;
     }
   }
-  await sleep(due - Date.now());
+  await ig.warm().catch(() => {});
+  await sleep(due - lead - Date.now());
   await send(ev.post_id, ev.kind);
 }
 
@@ -388,7 +405,8 @@ export async function listVerified() {
 }
 
 const AUTO_WINDOW = 48 * 60 * MIN; // lelang yang close lebih lama dari ini tidak lagi ditetapkan otomatis
-const AUTO_GRACE = 30_000; // beri waktu komentar menit-menit terakhir yang telat terbaca
+// Jeda setelah close sebelum pemenang bawaan ditetapkan, supaya komentar menit-menit terakhir yang telat terbaca ikut dihitung.
+const AUTO_GRACE = Math.max(0, Number(process.env.AUTO_RESULT_GRACE_SEC ?? 15)) * 1000;
 
 /**
  * Menetapkan pemenang bawaan untuk lelang yang sudah close: bid sah tertinggi, kalau bid itu sudah kamu sahkan
@@ -686,7 +704,7 @@ export async function getState() {
   const [posts, comments, events, bidders, total, results, me, lastError, lastOk, autoReply, autoDm] = await Promise.all([
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
-    q('SELECT * FROM events'),
+    q('SELECT e.*, c.ts AS ig_ts FROM events e LEFT JOIN comments c ON c.id = e.comment_id'),
     q('SELECT b.username, b.source FROM bidders b WHERE b.username IN (SELECT DISTINCT username FROM comments)'),
     q('SELECT count(*)::int AS n FROM bidders'),
     q('SELECT * FROM results ORDER BY close_at DESC NULLS LAST'),
@@ -731,13 +749,13 @@ export async function getState() {
       });
       const ev: Record<string, unknown> = {};
       for (const e of events) {
-        if (e.post_id === p.id) ev[e.kind] = { dueAt: toMs(e.due_at), status: e.status, sentAt: toMs(e.sent_at), error: e.error };
+        if (e.post_id === p.id) ev[e.kind] = { dueAt: toMs(e.due_at), status: e.status, sentAt: toMs(e.sent_at), igAt: toMs(e.ig_ts), error: e.error };
       }
       return {
         id: p.id as string, title: p.title as string, permalink: p.permalink as string, thumb: p.thumb as string | null,
         closeAt, openBid: p.open_bid as number | null, increment: p.increment as number | null, maxJump: p.max_jump as number | null,
         autoComment: p.auto_comment as boolean, lastSync: toMs(p.last_sync),
-        events: ev as Partial<Record<Kind, { dueAt: number; status: string; sentAt: number | null; error: string | null }>>,
+        events: ev as Partial<Record<Kind, { dueAt: number; status: string; sentAt: number | null; igAt: number | null; error: string | null }>>,
         top: top ? { amount: top.amount!, username: top.username, ts: top.ts } : null,
         rows: rows.reverse(),
       };

@@ -20,7 +20,7 @@ const REFRESH_AFTER = 7 * 86_400_000;
  * Token dari env. Token jenis "Instagram login" berlaku ±60 hari dan diperpanjang otomatis tiap minggu;
  * token system user (Unified login) tidak kedaluwarsa, dan percobaan perpanjangannya gagal tanpa akibat.
  */
-async function token(): Promise<string> {
+async function tokenUncached(): Promise<string> {
   const env = process.env.IG_ACCESS_TOKEN;
   if (!env) throw new Error('IG_ACCESS_TOKEN belum diisi');
   let t = await getKv<{ value: string; source: string; at: number }>('token');
@@ -59,7 +59,7 @@ type Account = { base: string; id: string; username: string; key: string };
  * - IG_USER_ID diisi: pakai ID itu (bawaan graph.facebook.com, untuk token Unified/Facebook login).
  * - Tanpa IG_USER_ID: coba token Instagram login, lalu cari akun lewat Halaman Facebook.
  */
-async function account(): Promise<Account> {
+async function accountUncached(): Promise<Account> {
   const key = createHash('sha256')
     .update([process.env.IG_ACCESS_TOKEN, process.env.IG_USER_ID, process.env.IG_API_BASE, ver()].join('|'))
     .digest('hex')
@@ -192,8 +192,34 @@ export async function postReply(commentId: string, message: string): Promise<str
   return String(j.id);
 }
 
+// Token dan akun diingat di memori beberapa saat, supaya mengirim komentar tidak menunggu pembacaan database dulu.
+const memo: { tok?: { v: string; at: number }; acct?: { v: Account; at: number } } = {};
+async function token(): Promise<string> {
+  if (memo.tok && Date.now() - memo.tok.at < 30_000) return memo.tok.v;
+  const v = await tokenUncached();
+  memo.tok = { v, at: Date.now() };
+  return v;
+}
+async function account(): Promise<Account> {
+  if (memo.acct && Date.now() - memo.acct.at < 60_000) return memo.acct.v;
+  const v = await accountUncached();
+  memo.acct = { v, at: Date.now() };
+  return v;
+}
+
+/** Menyiapkan token dan akun sebelum komentar terjadwal dikirim, supaya detik pengirimannya tidak terpakai untuk itu. */
+export async function warm() {
+  if (isMock()) return;
+  await account();
+  await token();
+}
+
 export async function postComment(mediaId: string, message: string): Promise<string> {
-  if (isMock()) return mock.postComment(mediaId, message);
+  if (isMock()) {
+    const d = Number(process.env.MOCK_POST_DELAY_MS || 0); // untuk menguji penjadwalan dengan keterlambatan jaringan
+    if (d > 0) await new Promise((r) => setTimeout(r, d));
+    return mock.postComment(mediaId, message);
+  }
   const j = await call(`/${mediaId}/comments`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },

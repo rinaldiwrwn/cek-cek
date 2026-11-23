@@ -405,14 +405,15 @@ function EventChip({ p, kind, now }: { p: Post; kind: Kind; now: number }) {
   const name = KIND_LABEL[kind];
   let status = 'terjadwal';
   let tone = '';
-  if (e.status === 'sent') [status, tone] = [`terkirim ${time(e.sentAt!)}`, 'ok'];
+  // Waktu tayang di Instagram (kalau sudah terbaca) lebih tepat daripada saat Instagram membalas permintaan kirim.
+  if (e.status === 'sent') [status, tone] = [e.igAt ? `tayang ${time(e.igAt)}` : `terkirim ${time(e.sentAt!)}`, 'ok'];
   else if (e.status === 'claimed') [status, tone] = ['bersiap…', 'warn'];
   else if (e.status === 'failed') [status, tone] = ['gagal', 'bad'];
   else if (e.status === 'skipped') [status, tone] = ['dilewati, bid kurang', 'off'];
   else if (e.status === 'missed' || e.dueAt < now - 20_000) [status, tone] = ['tidak terkirim', 'bad'];
   else if (!p.autoComment) [status, tone] = ['nonaktif', 'off'];
   return (
-    <span className={`chip ${tone}`} title={e.error || undefined}>
+    <span className={`chip ${tone}`} title={e.error || (e.status === 'sent' ? `Instagram membalas permintaan kirim pukul ${time(e.sentAt!)}${e.igAt ? `; komentar tayang pukul ${time(e.igAt)}` : ''}` : undefined)}>
       {name} {time(e.dueAt)} · {status}
     </span>
   );

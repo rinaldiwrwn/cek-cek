@@ -9,7 +9,7 @@ const WATCHES = [
 ];
 const USERS = ['budi.watch', 'arloji_sby', 'kolektor88', 'dimas_r', 'tono.jam', 'hunter_seiko'];
 
-type Store = { media: Media[]; comments: Record<string, IgComment[]>; seq: number; removed: boolean; calls: Record<string, number>; dms: { commentId: string; text: string }[] };
+type Store = { media: Media[]; comments: Record<string, IgComment[]>; seq: number; removed: boolean; calls: Record<string, number>; created: Record<string, number>; dms: { commentId: string; text: string }[] };
 const g = globalThis as unknown as { __lmMock?: Store };
 
 const wib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString();
@@ -17,7 +17,7 @@ const wib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString();
 function init(): Store {
   const now = Date.now();
   const first = Math.ceil((now + 7 * 60_000) / 60_000) * 60_000;
-  const s: Store = { media: [], comments: {}, seq: 1, removed: false, calls: {}, dms: [] };
+  const s: Store = { media: [], comments: {}, seq: 1, removed: false, calls: {}, created: {}, dms: [] };
   WATCHES.forEach((name, i) => {
     const close = wib(first + i * 5 * 60_000);
     const [y, mo, d] = close.slice(0, 10).split('-');
@@ -93,5 +93,6 @@ export function postComment(mediaId: string, message: string): string {
   const s = store();
   const id = String(s.seq++);
   (s.comments[mediaId] ??= []).push({ id, parentId: null, username: me.username, text: message, ts: Math.floor(Date.now() / 1000) * 1000 });
+  s.created[id] = Date.now();
   return id;
 }
