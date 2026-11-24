@@ -653,11 +653,23 @@ function FollowupLine({ f, act }: { f: Followup; act: (b: unknown) => Promise<vo
     <span className={f.status === 'waiting' ? 'muted small' : 'small warnline'}>
       💬 Chat lanjutan: {label}{' '}
       {text && <button className="mini" onClick={() => setOpen(!open)}>{open ? 'Tutup' : 'Lihat isinya'}</button>}
+      {text && <button className="mini" onClick={() => copyText(text)}>Salin pesan</button>}
+      <a className="mini linkbtn" href={`https://ig.me/m/${f.username}`} target="_blank" rel="noreferrer">Buka chat</a>
       <button className="mini" onClick={async () => { try { const j = await api('/api/action', { type: 'fudiag', username: f.username, day: f.day }); alert(j.lines.join('\n\n')); } catch (e) { alert((e as Error).message); } }}>Diagnosa</button>
       <button className="mini" onClick={() => confirm(`Kirim chat lanjutan (${what}) ke @${f.username} sekarang?\n\n${text}\n\nPelanggan harus sudah membalas DM-mu dalam 24 jam terakhir, kalau belum Instagram menolaknya.`) && act({ type: 'followup', username: f.username, day: f.day })}>Kirim sekarang</button>
-      {open && text && <span className="small pre">{text}</span>}
+      {open && text && <span className="small pre">{text}{f.preview && !f.preview.complete && !f.text ? '\n\n(Belum final: masih menunggu lelang atau DM lain hari itu.)' : ''}</span>}
     </span>
   );
+}
+
+/** Menyalin teks ke papan klip. Kalau browser menolak, teksnya ditampilkan supaya bisa disalin manual. */
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('Pesan disalin. Tempel di chat Instagram.');
+  } catch {
+    prompt('Salin pesan ini:', text);
+  }
 }
 
 /** Daftar pelanggan lama: ongkir dan sapaan tiap akun, dipakai untuk rekap total di chat lanjutan. */
