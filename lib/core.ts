@@ -2,6 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { amountText, cleanUsername, parseBid, parseCaption, splitUsernames } from './parse';
+import { dayKey, dayStart, DAY_MS, decideFollowup, recapMessage, REPLY_WINDOW_MS, NEW_CUSTOMER_TEXT, type Win } from './followup';
 import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, isTestAccount, SNIPER_MS, testAccounts, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -354,6 +355,7 @@ export async function tick(loop: boolean) {
   }
   await syncAutoResults().catch(noteError);
   await autoDms().catch(noteError);
+  await autoFollowups().catch(noteError);
   await Promise.all(timers);
 }
 
@@ -634,8 +636,8 @@ async function deliverDm(postId: string, username: string, comment: { id: string
   );
   if (!claim.length) throw new Error('DM ke pemenang ini sudah terkirim atau sedang dikirim');
   try {
-    await ig.sendPrivateReply(comment.id, text);
-    await q(`UPDATE results SET dm_status = 'sent', dm_at = $2 WHERE post_id = $1`, [postId, iso(Date.now())]);
+    const sent = await ig.sendPrivateReply(comment.id, text);
+    await q(`UPDATE results SET dm_status = 'sent', dm_at = $2, dm_recipient = $3 WHERE post_id = $1`, [postId, iso(Date.now()), sent.recipientId || null]);
   } catch (e) {
     const msg = String((e as Error)?.message || e).slice(0, 500);
     if ((e as { ambiguous?: boolean })?.ambiguous) {
@@ -732,6 +734,151 @@ export async function autoDms() {
   }
 }
 
+// ---------- Chat lanjutan setelah DM pemenang ----------
+// Setelah pemenang membalas DM-nya, dikirim pesan lanjutan: rekap total untuk pelanggan lama (ada di daftar, lengkap
+// dengan ongkir), atau permintaan alamat untuk pelanggan baru. Instagram hanya mengizinkan pesan kedua setelah
+// pelanggan membalas, jadi balasannya dicek lewat percakapan.
+const FOLLOWUP_MAX_AGE = 48 * 60 * MIN; // setelah ini grupnya tidak dicek lagi otomatis
+const FOLLOWUP_CHECK_GAP = 30_000; // tiap grup dicek paling sering sekali per 30 detik
+const FOLLOWUPS_PER_TICK = 6;
+const transferInfo = () => process.env.TRANSFER_INFO || '';
+const newCustomerText = () => process.env.FOLLOWUP_NEW_TEXT || NEW_CUSTOMER_TEXT;
+
+export async function getAutoFollowup() {
+  const v = await getKv<{ on: boolean; since: number }>('autoFollowup');
+  return { on: !!v?.on, since: v?.since ?? null };
+}
+
+/** Menyalakan chat lanjutan. Hanya DM pemenang yang terkirim setelah dinyalakan yang diproses. */
+export async function setAutoFollowup(on: boolean) {
+  await setKv('autoFollowup', { on, since: Date.now() });
+}
+
+export async function setCustomer(rawUser: string, ongkir: number, greeting: string) {
+  const username = cleanUsername(rawUser);
+  if (!username) throw new Error('Username tidak valid');
+  if (!Number.isFinite(ongkir) || ongkir < 0 || ongkir > 100_000) throw new Error('Ongkir tidak valid (isi dalam ribuan, mis. 18)');
+  await q(
+    `INSERT INTO customers (username, ongkir, greeting, updated_at) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (username) DO UPDATE SET ongkir = $2, greeting = $3, updated_at = $4`,
+    [username, Math.round(ongkir), greeting === 'ka' ? 'ka' : 'om', iso(Date.now())],
+  );
+}
+
+export async function removeCustomer(rawUser: string) {
+  await q('DELETE FROM customers WHERE username = $1', [cleanUsername(rawUser) || '']);
+}
+
+/** Mengumpulkan data satu pemenang pada satu hari (WIB): kemenangan, DM-nya, dan lelang yang belum selesai. */
+async function followupContext(username: string, day: string) {
+  const start = dayStart(day);
+  const now = Date.now();
+  const [wins, undecided, customer] = await Promise.all([
+    q(`SELECT post_id, amount, close_at, dm_status, dm_username, dm_at, dm_recipient FROM results
+       WHERE status = 'winner' AND username = $1 AND close_at >= $2 AND close_at < $3 ORDER BY close_at`, [username, iso(start), iso(start + DAY_MS)]),
+    q(`SELECT count(*)::int AS n FROM posts p WHERE p.close_at >= $1 AND p.close_at < $2
+         AND (p.close_at > $3 OR (p.close_at > $4 AND NOT EXISTS (SELECT 1 FROM results r WHERE r.post_id = p.id)))`,
+      [iso(start), iso(start + DAY_MS), iso(now), iso(now - 2 * 60 * MIN)]),
+    q('SELECT ongkir, greeting FROM customers WHERE username = $1', [username]),
+  ]);
+  const sent = wins.filter((w) => w.dm_status === 'sent' && w.dm_username === username);
+  const recipient = [...sent].sort((a, b) => toMs(b.dm_at)! - toMs(a.dm_at)!).find((w) => w.dm_recipient)?.dm_recipient as string | undefined;
+  const winList: Win[] = wins.map((w) => ({ postId: w.post_id, amount: w.amount, closeAt: toMs(w.close_at)!, dmSent: w.dm_status === 'sent' && w.dm_username === username }));
+  return {
+    wins: winList,
+    undecided: Number(undecided[0]?.n ?? 0),
+    customer: customer.length ? { ongkir: customer[0].ongkir as number, greeting: customer[0].greeting as string } : null,
+    firstDmAt: sent.length ? Math.min(...sent.map((w) => toMs(w.dm_at)!)) : now,
+    recipient: recipient || null,
+  };
+}
+
+const FU_OPEN = ['waiting'];
+
+/**
+ * Memeriksa satu grup (pemenang + hari): sudah membalas atau belum, lalu mengirim pesan lanjutan kalau syaratnya terpenuhi.
+ * manual = dikirim dari tombol: boleh melewati syarat menunggu lelang lain, dan galat dilempar ke pemanggil.
+ */
+export async function processFollowup(username: string, day: string, manual = false) {
+  const now = Date.now();
+  await q(`INSERT INTO followups (username, day, status) VALUES ($1,$2,'waiting') ON CONFLICT DO NOTHING`, [username, day]);
+  const row = (await q('SELECT * FROM followups WHERE username = $1 AND day = $2', [username, day]))[0];
+  if (row.status === 'sending' || row.status === 'sent') {
+    if (manual) throw new Error(row.status === 'sent' ? 'Chat lanjutan sudah terkirim' : 'Chat lanjutan sedang dikirim');
+    return;
+  }
+  if (!manual && !FU_OPEN.includes(row.status)) return;
+  if (!manual && row.checked_at && now - toMs(row.checked_at)! < FOLLOWUP_CHECK_GAP) return;
+
+  const ctx = await followupContext(username, day);
+  const fail = async (msg: string) => {
+    await q(`UPDATE followups SET checked_at = $3, reason = $4 WHERE username = $1 AND day = $2`, [username, day, iso(now), msg.slice(0, 300)]);
+    if (manual) throw new Error(msg);
+  };
+  if (!ctx.recipient) return fail('ID penerima DM belum tersimpan (DM dikirim sebelum fitur ini ada, atau Instagram tidak mengembalikannya)');
+  let lastReplyAt: number | null;
+  try {
+    lastReplyAt = await ig.lastCustomerMessageAt(ctx.recipient);
+  } catch (e) {
+    await noteError(`Membaca balasan @${username} gagal: ${String((e as Error)?.message || e)}`);
+    return fail(`Gagal membaca balasan: ${String((e as Error)?.message || e)}`);
+  }
+  const d = decideFollowup({ now, wins: ctx.wins, customer: ctx.customer, lastReplyAt, firstDmAt: ctx.firstDmAt, undecided: ctx.undecided, transfer: transferInfo(), newText: newCustomerText(), force: manual });
+  if (d.action === 'wait') return fail(d.reason);
+  if (d.action === 'expired') {
+    await q(`UPDATE followups SET status = 'expired', checked_at = $3, reason = $4 WHERE username = $1 AND day = $2`, [username, day, iso(now), d.reason]);
+    if (manual) throw new Error(d.reason);
+    return;
+  }
+  const claim = await q(
+    `UPDATE followups SET status = 'sending', kind = $3, text = $4, checked_at = $5, reason = NULL, error = NULL
+     WHERE username = $1 AND day = $2 AND status IN ('waiting','failed','expired','unsure') RETURNING username`,
+    [username, day, d.kind, d.text, iso(now)],
+  );
+  if (!claim.length) return;
+  try {
+    await ig.sendMessage(ctx.recipient, d.text);
+    await q(`UPDATE followups SET status = 'sent', sent_at = $3 WHERE username = $1 AND day = $2`, [username, day, iso(Date.now())]);
+  } catch (e) {
+    const msg = String((e as Error)?.message || e).slice(0, 500);
+    const unsure = !!(e as { ambiguous?: boolean })?.ambiguous;
+    const note = unsure ? `${msg} (pesan mungkin tetap terkirim, cek kotak pesan penerima)` : msg;
+    await q(`UPDATE followups SET status = $3, error = $4 WHERE username = $1 AND day = $2`, [username, day, unsure ? 'unsure' : 'failed', note]);
+    await noteError(`Chat lanjutan ke @${username} ${unsure ? 'belum pasti' : 'gagal'}: ${note}`);
+    if (manual) throw new Error(note);
+  }
+}
+
+/** Dipanggil tiap tick: memeriksa pemenang yang DM-nya sudah terkirim dan belum diberi chat lanjutan. */
+export async function autoFollowups() {
+  const cfg = await getAutoFollowup();
+  if (!cfg.on || !cfg.since) return;
+  const now = Date.now();
+  const cand = await q(
+    `SELECT username, close_at FROM results WHERE status = 'winner' AND dm_status = 'sent' AND dm_username = username
+       AND dm_recipient IS NOT NULL AND dm_at >= $1 AND dm_at > $2`,
+    [iso(cfg.since), iso(now - FOLLOWUP_MAX_AGE)],
+  );
+  const groups = new Map<string, { username: string; day: string }>();
+  for (const c of cand) {
+    const day = dayKey(toMs(c.close_at)!);
+    groups.set(`${c.username}|${day}`, { username: c.username, day });
+  }
+  let budget = FOLLOWUPS_PER_TICK;
+  for (const g of groups.values()) {
+    if (budget <= 0) break;
+    budget--;
+    await processFollowup(g.username, g.day).catch(noteError);
+  }
+}
+
+/** Isi chat lanjutan yang akan dikirim untuk sebuah grup, kalau pelanggannya sudah membalas (untuk ditampilkan di dashboard). */
+async function followupPreview(username: string, day: string) {
+  const ctx = await followupContext(username, day);
+  const d = decideFollowup({ now: Date.now(), wins: ctx.wins, customer: ctx.customer, lastReplyAt: Date.now(), firstDmAt: 0, undecided: ctx.undecided, transfer: transferInfo(), newText: newCustomerText(), force: true });
+  return d.action === 'send' ? { kind: d.kind, text: d.text } : null;
+}
+
 /** Menetapkan hasil lelang: pemenang (akun + nominal), "No Winner", atau null untuk membatalkan penetapan. */
 export async function setResult(postId: string, r: { status: 'winner' | 'none'; username?: string; amount?: number; note?: string } | null) {
   if (!r) {
@@ -756,7 +903,7 @@ export async function setOverride(commentId: string, value: 'valid' | 'invalid' 
 }
 
 export async function getState() {
-  const [posts, comments, events, bidders, total, results, me, lastError, lastOk, autoReply, autoDm] = await Promise.all([
+  const [posts, comments, events, bidders, total, results, me, lastError, lastOk, autoReply, autoDm, autoFollowup, customers, followupRows] = await Promise.all([
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT e.*, c.ts AS ig_ts FROM events e LEFT JOIN comments c ON c.id = e.comment_id'),
@@ -768,7 +915,17 @@ export async function getState() {
     getKv<number>('lastOk'),
     getAutoReply(),
     getAutoDm(),
+    getAutoFollowup(),
+    q('SELECT username, ongkir, greeting FROM customers ORDER BY username'),
+    q(`SELECT * FROM followups WHERE day >= $1 ORDER BY day DESC, username`, [dayKey(Date.now() - 3 * DAY_MS)]),
   ]);
+  const followups = await Promise.all(
+    followupRows.map(async (f) => ({
+      username: f.username as string, day: f.day as string, status: f.status as 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired',
+      kind: f.kind as 'recap' | 'new' | null, text: f.text as string | null, reason: f.reason as string | null, error: f.error as string | null, sentAt: toMs(f.sent_at),
+      preview: f.status === 'sent' || f.status === 'sending' ? null : await followupPreview(f.username, f.day).catch(() => null),
+    })),
+  );
 
   const verified = new Set(bidders.map((b) => b.username as string));
   const imported = new Set(bidders.filter((b) => b.source === 'import').map((b) => b.username as string));
@@ -788,6 +945,10 @@ export async function getState() {
     texts: texts(),
     autoReply,
     autoDm,
+    autoFollowup,
+    customers: customers.map((c) => ({ username: c.username as string, ongkir: c.ongkir as number, greeting: c.greeting as 'om' | 'ka' })),
+    followups,
+    transferSet: !!transferInfo(),
     dmDelaySec: AUTO_DM_DELAY / 1000,
     dmTemplate: dmTemplate(),
     testAccounts: [...testAccounts()],

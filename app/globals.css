@@ -169,3 +169,9 @@ button.attn { border-color: var(--warn); background: var(--warn-bg); color: var(
 .warnline { color: var(--warn); font-weight: 600; }
 .dmbtn { align-self: flex-start; margin-top: 6px; }
 .syncline { margin: 4px 12px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.seqrow { display: grid; grid-template-columns: 1fr 96px 70px auto; gap: 6px; align-items: center; }
+.seqrow input, .seqrow select { min-width: 0; width: 100%; }
+@media (max-width: 480px) { .seqrow { grid-template-columns: 1fr 1fr; } .seqrow button { grid-column: 1 / -1; } }
+.customers .vlist li { flex-wrap: wrap; }
+.pre { display: block; white-space: pre-wrap; font-weight: 400; color: var(--ink); margin-top: 4px; }

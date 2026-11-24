@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
 import { amountText, extractUsernames } from '@/lib/parse';
+import { dayKey, greetingWord } from '@/lib/followup';
 
 type Post = State['posts'][number];
 type Row = Post['rows'][number];
+type Followup = State['followups'][number];
 type Kind = 'ten' | 'sniper' | 'close';
 const KIND_LABEL: Record<Kind, string> = { ten: '10 Menit', sniper: 'Sniper Zone', close: 'Close' };
 
@@ -98,6 +100,7 @@ export function Dashboard() {
   const [showVerified, setShowVerified] = useState(false);
   const [feedView, setFeedView] = useState<'bid' | 'auto' | null>(null);
   const [showWinners, setShowWinners] = useState(false);
+  const [showCustomers, setShowCustomers] = useState(false);
   // Batas "sudah dilihat" disimpan di browser ini, terpisah untuk notifikasi bid dan notifikasi otomasi.
   const [seenBid, setSeenBid] = useState(0);
   const [seenAuto, setSeenAuto] = useState(0);
@@ -271,6 +274,16 @@ export function Dashboard() {
         >
           Auto-DM pemenang: {state.autoDm.on ? 'nyala' : 'mati'}
         </button>
+        <button
+          className={state.autoFollowup.on ? 'on-switch' : ''}
+          aria-pressed={state.autoFollowup.on}
+          onClick={() => {
+            if (!state.autoFollowup.on && !confirm('Nyalakan chat lanjutan otomatis?\n\nSetelah pemenang membalas DM kemenangannya, dikirim pesan lanjutan: pelanggan lama (ada di daftar Pelanggan lama) mendapat rekap "harga+packing+…+ongkir=total" setelah semua lelang hari itu selesai dan di-DM, pelanggan baru diminta alamat lengkap dan kontak penerima. Pesan lanjutan hanya bisa terkirim kalau pemenang membalas DM (aturan Instagram: 24 jam sejak balasannya). Hanya DM pemenang yang terkirim SETELAH ini yang diproses. Pesan tidak bisa ditarik kembali.' + (state.transferSet ? '' : '\n\nCatatan: TRANSFER_INFO belum diisi, jadi rekap dikirim tanpa info rekening.'))) return;
+            act({ type: 'autofollowup', on: !state.autoFollowup.on });
+          }}
+        >
+          Auto-chat lanjutan: {state.autoFollowup.on ? 'nyala' : 'mati'}
+        </button>
         <button className={freshBid ? 'attn' : ''} aria-expanded={feedView === 'bid'} onClick={() => toggleFeed('bid')}>
           Notif bid{freshBid ? ` (${freshBid} baru)` : ''}
         </button>
@@ -279,6 +292,9 @@ export function Dashboard() {
         </button>
         <button aria-expanded={showWinners} onClick={() => setShowWinners(!showWinners)}>
           Pemenang ({state.results.filter((r) => r.status === 'winner' && !r.test).length})
+        </button>
+        <button aria-expanded={showCustomers} onClick={() => setShowCustomers(!showCustomers)}>
+          Pelanggan lama ({state.customers.length})
         </button>
         <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
           Akun sah ({state.verifiedCount})
@@ -289,6 +305,8 @@ export function Dashboard() {
       {feedView === 'auto' && <FeedPanel title="Notifikasi otomasi komentar" items={feedAuto} seen={seenAuto} onSeen={() => markSeen('auto')} onPick={pick} />}
 
       {showWinners && <Winners results={state.results} />}
+
+      {showCustomers && <CustomersPanel customers={state.customers} packingNote={state.transferSet} act={act} />}
 
       {showVerified && <VerifiedPanel count={state.verifiedCount} act={act} />}
 
@@ -327,7 +345,7 @@ export function Dashboard() {
             Komentar terakhir dibaca {p.lastSync ? time(p.lastSync) : 'belum pernah'}.{' '}
             <button className="mini" onClick={() => act({ type: 'sync', id: p.id })}>↻ Muat ulang komentar</button>
           </p>
-          <Detail p={p} result={state.results.find((r) => r.postId === p.id)} act={act} />
+          <Detail p={p} result={state.results.find((r) => r.postId === p.id)} followups={state.followups} act={act} />
         </section>
       ))}
       {state.posts.length > 0 && !open && <p className="muted small hint">Geser ke samping untuk melihat lelang lain. Ketuk satu lelang untuk melihat bid-nya.</p>}
@@ -369,6 +387,15 @@ function buildFeed(state: State): FeedItem[] {
     if (r.dm.status === 'sent' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang terkirim ke @${r.dm.username}${r.dm.auto ? ' (otomatis)' : ''}`, tone: 'ok' });
     else if (r.dm.status === 'unsure' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang ke @${r.dm.username}: Instagram melapor error, DM mungkin tetap terkirim. Cek kotak pesan.`, tone: 'warn' });
     else if (r.dm.status === 'failed' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang ke @${r.dm.username} GAGAL${r.dm.error ? `: ${r.dm.error}` : ''}`, tone: 'bad' });
+  }
+  for (const f of state.followups) {
+    const r = state.results.find((x) => x.status === 'winner' && x.username === f.username && x.closeAt != null && dayKey(x.closeAt) === f.day);
+    if (!r) continue;
+    const base = { postId: r.postId, title: r.title, kind: 'auto' as const, key: `${r.postId}:fu`, t: f.sentAt ?? r.dm?.at ?? 0 };
+    const what = f.kind === 'new' ? 'permintaan alamat' : 'rekap total';
+    if (f.status === 'sent' && f.sentAt) out.push({ ...base, text: `Chat lanjutan (${what}) terkirim ke @${f.username}`, tone: 'ok' });
+    else if (f.status === 'failed') out.push({ ...base, text: `Chat lanjutan ke @${f.username} GAGAL${f.error ? `: ${f.error}` : ''}`, tone: 'bad' });
+    else if (f.status === 'unsure') out.push({ ...base, text: `Chat lanjutan ke @${f.username}: Instagram melapor error, pesan mungkin tetap terkirim. Cek kotak pesan.`, tone: 'warn' });
   }
   return out.sort((a, b) => b.t - a.t);
 }
@@ -606,8 +633,89 @@ function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Pro
   );
 }
 
+/** Status chat lanjutan untuk pemenang pada hari itu, dengan isi pesannya dan tombol kirim manual. */
+function FollowupLine({ f, act }: { f: Followup; act: (b: unknown) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const what = f.kind === 'new' || f.preview?.kind === 'new' ? 'permintaan alamat' : 'rekap total';
+  const text = f.text || f.preview?.text || '';
+  if (f.status === 'sent') {
+    return (
+      <span className="small won">
+        💬 Chat lanjutan ({what}) terkirim {f.sentAt ? time(f.sentAt) : ''}{' '}
+        <button className="mini" onClick={() => setOpen(!open)}>{open ? 'Tutup' : 'Lihat'}</button>
+        {open && <span className="small pre">{text}</span>}
+      </span>
+    );
+  }
+  if (f.status === 'sending') return <span className="muted small">💬 Chat lanjutan sedang dikirim…</span>;
+  const label = f.status === 'failed' ? `gagal${f.error ? `: ${f.error}` : ''}` : f.status === 'unsure' ? 'belum pasti, cek kotak pesan' : f.status === 'expired' ? f.reason || 'jendela balasan habis' : f.reason || 'menunggu';
+  return (
+    <span className={f.status === 'waiting' ? 'muted small' : 'small warnline'}>
+      💬 Chat lanjutan: {label}{' '}
+      {text && <button className="mini" onClick={() => setOpen(!open)}>{open ? 'Tutup' : 'Lihat isinya'}</button>}
+      <button className="mini" onClick={() => confirm(`Kirim chat lanjutan (${what}) ke @${f.username} sekarang?\n\n${text}\n\nPelanggan harus sudah membalas DM-mu dalam 24 jam terakhir, kalau belum Instagram menolaknya.`) && act({ type: 'followup', username: f.username, day: f.day })}>Kirim sekarang</button>
+      {open && text && <span className="small pre">{text}</span>}
+    </span>
+  );
+}
+
+/** Daftar pelanggan lama: ongkir dan sapaan tiap akun, dipakai untuk rekap total di chat lanjutan. */
+function CustomersPanel({ customers, packingNote, act }: { customers: State['customers']; packingNote: boolean; act: (b: unknown) => Promise<void> }) {
+  const [user, setUser] = useState('');
+  const [ongkir, setOngkir] = useState('');
+  const [greeting, setGreeting] = useState<'om' | 'ka'>('om');
+  const [find, setFind] = useState('');
+  const shown = customers.filter((c) => c.username.includes(find.trim().replace(/^@/, '').toLowerCase()));
+  const save = async (username: string, ong: string, g: string) => {
+    await act({ type: 'customer', username, ongkir: Number(ong), greeting: g });
+  };
+  return (
+    <section className="note verified customers">
+      <h2 className="detailtitle">Pelanggan lama</h2>
+      <p className="muted small">
+        Akun di daftar ini mendapat rekap total setelah membalas DM kemenangan: harga+packing per barang, ditambah ongkirnya. Akun di luar daftar diminta alamat dulu.
+        Ongkir dalam ribuan (mis. 18). {packingNote ? '' : 'Info rekening belum diisi (variabel TRANSFER_INFO), jadi rekap dikirim tanpa rekening.'}
+      </p>
+      <form
+        className="seqrow"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!user.trim() || ongkir === '') return;
+          await save(user, ongkir, greeting);
+          setUser('');
+          setOngkir('');
+        }}
+      >
+        <input placeholder="@username" value={user} onChange={(e) => setUser(e.target.value)} aria-label="Username" />
+        <input placeholder="Ongkir (rb)" inputMode="numeric" value={ongkir} onChange={(e) => setOngkir(e.target.value.replace(/\D/g, ''))} aria-label="Ongkir dalam ribuan" />
+        <select value={greeting} onChange={(e) => setGreeting(e.target.value as 'om' | 'ka')} aria-label="Sapaan">
+          <option value="om">om</option>
+          <option value="ka">kaa</option>
+        </select>
+        <button className="primary" type="submit">Simpan</button>
+      </form>
+      {customers.length > 8 && <input placeholder="Cari akun…" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Cari pelanggan" />}
+      <ul className="vlist">
+        {shown.map((c) => (
+          <li key={c.username}>
+            <span>
+              @{c.username} <span className="muted small">· ongkir {c.ongkir}rb · sapaan {greetingWord(c.greeting)}</span>
+            </span>
+            <span>
+              <button className="mini" onClick={() => { const v = prompt(`Ongkir baru untuk @${c.username} (ribuan):`, String(c.ongkir)); if (v != null && v.trim() !== '' && Number.isFinite(Number(v))) save(c.username, v.trim(), c.greeting); }}>Ubah ongkir</button>
+              <button className="mini" onClick={() => save(c.username, String(c.ongkir), c.greeting === 'ka' ? 'om' : 'ka')}>Sapaan: {greetingWord(c.greeting)}</button>
+              <button className="mini" onClick={() => confirm(`Hapus @${c.username} dari pelanggan lama?`) && act({ type: 'delcustomer', username: c.username })}>Hapus</button>
+            </span>
+          </li>
+        ))}
+        {!shown.length && <li className="muted small">{customers.length ? 'Tidak ada yang cocok.' : 'Belum ada pelanggan lama.'}</li>}
+      </ul>
+    </section>
+  );
+}
+
 /** Penetapan hasil lelang: pemenang dipilih dari pemilik bid sah (usulan: yang tertinggi), atau "No Winner". Bisa diubah kapan saja. */
-function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unknown) => Promise<void> }) {
+function ResultBox({ p, result, followup, act }: { p: Post; result?: Result; followup?: Followup; act: (b: unknown) => Promise<void> }) {
   // Bid sah tertinggi tiap akun, dari yang terbesar.
   const best = new Map<string, number>();
   const testUsers = new Set(p.rows.filter((r) => r.isTest).map((r) => r.username));
@@ -644,6 +752,7 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
           <span className="small warnline" title={result.dm.error || undefined}>⚠ Instagram melapor error saat DM ke @{result.dm.username}, tapi DM mungkin sudah sampai. Cek kotak pesan penerima sebelum kirim ulang.</span>
         )}
         {result.status === 'winner' && result.dm?.status === 'sending' && <span className="muted small">DM sedang dikirim…</span>}
+        {followup && <FollowupLine f={followup} act={act} />}
         {result.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && (
           <button
             className="mini dmbtn"
@@ -738,7 +847,7 @@ function Winners({ results: all }: { results: Result[] }) {
   );
 }
 
-function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown) => Promise<void> }) {
+function Detail({ p, result, followups, act }: { p: Post; result?: Result; followups: Followup[]; act: (b: unknown) => Promise<void> }) {
   const [all, setAll] = useState(false);
   const [form, setForm] = useState({ closeAt: toInput(p.closeAt), openBid: p.openBid ?? '', increment: p.increment ?? '', maxJump: p.maxJump ?? '' });
   const rows = p.rows.filter((r) => all || r.isBid);
@@ -764,7 +873,7 @@ function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown
         ))}
       </ul>
 
-      <ResultBox p={p} result={result} act={act} />
+      <ResultBox p={p} result={result} followup={result?.status === 'winner' && result.closeAt ? followups.find((f) => f.username === result.username && f.day === dayKey(result.closeAt!)) : undefined} act={act} />
 
       <h2>Aturan lelang <span className="muted small">(nominal dalam ribuan)</span></h2>
       <form

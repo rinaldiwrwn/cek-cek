@@ -9,7 +9,7 @@ const WATCHES = [
 ];
 const USERS = ['budi.watch', 'arloji_sby', 'kolektor88', 'dimas_r', 'tono.jam', 'hunter_seiko'];
 
-type Store = { media: Media[]; comments: Record<string, IgComment[]>; seq: number; removed: boolean; calls: Record<string, number>; created: Record<string, number>; dms: { commentId: string; text: string }[] };
+type Store = { media: Media[]; comments: Record<string, IgComment[]>; seq: number; removed: boolean; calls: Record<string, number>; created: Record<string, number>; dms: { commentId: string; text: string }[]; chat: { to: string; text: string; ts: number }[]; replies: Record<string, number> };
 const g = globalThis as unknown as { __lmMock?: Store };
 
 const wib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString();
@@ -17,7 +17,7 @@ const wib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString();
 function init(): Store {
   const now = Date.now();
   const first = Math.ceil((now + 7 * 60_000) / 60_000) * 60_000;
-  const s: Store = { media: [], comments: {}, seq: 1, removed: false, calls: {}, created: {}, dms: [] };
+  const s: Store = { media: [], comments: {}, seq: 1, removed: false, calls: {}, created: {}, dms: [], chat: [], replies: {} };
   WATCHES.forEach((name, i) => {
     const close = wib(first + i * 5 * 60_000);
     const [y, mo, d] = close.slice(0, 10).split('-');
@@ -71,13 +71,31 @@ export function listComments(mediaId: string): IgComment[] {
 }
 
 /** Meniru aturan Instagram: komentarnya harus ada, dan hanya satu DM per komentar. */
-export function sendPrivateReply(commentId: string, text: string): string {
+export function sendPrivateReply(commentId: string, text: string): { messageId: string; recipientId: string } {
   const s = store();
-  if (!Object.values(s.comments).some((l) => l.some((c) => c.id === commentId))) throw new Error('Instagram: komentar tidak ditemukan');
+  const owner = Object.values(s.comments).flat().find((c) => c.id === commentId);
+  if (!owner) throw new Error('Instagram: komentar tidak ditemukan');
   if (s.dms.some((d) => d.commentId === commentId)) throw new Error('Instagram: sudah ada DM untuk komentar ini');
   s.dms.push({ commentId, text });
-  return `dm${s.seq++}`;
+  return { messageId: `dm${s.seq++}`, recipientId: `igsid_${owner.username}` };
 }
+
+/** Pesan biasa: hanya boleh kalau pelanggan membalas dalam 24 jam terakhir, seperti aturan Instagram. */
+export function sendMessage(recipientId: string, text: string): string {
+  const s = store();
+  const last = s.replies[recipientId];
+  if (!last || Date.now() - last > 24 * 3_600_000) throw new Error('Instagram: di luar jendela balasan 24 jam');
+  s.chat.push({ to: recipientId, text, ts: Date.now() });
+  return `msg${s.seq++}`;
+}
+
+export const lastCustomerMessageAt = (recipientId: string): number | null => store().replies[recipientId] ?? null;
+
+/** Hanya untuk uji: meniru pelanggan yang membalas DM. */
+export const mockCustomerReply = (username: string, at = Date.now()) => {
+  store().replies[`igsid_${username}`] = at;
+};
+export const mockChat = () => store().chat;
 
 export function postReply(commentId: string, message: string): string {
   const s = store();
