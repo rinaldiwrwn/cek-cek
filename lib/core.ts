@@ -637,7 +637,7 @@ async function deliverDm(postId: string, username: string, comment: { id: string
     await ig.sendPrivateReply(comment.id, text);
     await q(`UPDATE results SET dm_status = 'sent', dm_at = $2 WHERE post_id = $1`, [postId, iso(Date.now())]);
   } catch (e) {
-    const msg = String((e as Error)?.message || e).slice(0, 300);
+    const msg = String((e as Error)?.message || e).slice(0, 500);
     if ((e as { ambiguous?: boolean })?.ambiguous) {
       // Instagram kadang melapor error padahal DM-nya sampai. Tandai "belum pasti", jangan dicoba lagi otomatis.
       const note = `${msg} (DM mungkin tetap terkirim, cek kotak pesan penerima)`;

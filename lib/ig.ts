@@ -49,7 +49,11 @@ async function request(url: string, init?: RequestInit): Promise<any> {
   const r = await fetch(full, { ...init, cache: 'no-store' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.error) {
-    const err = new Error(`Instagram: ${j.error?.message || `HTTP ${r.status}`}`) as Error & { ambiguous?: boolean };
+    // Rincian dari Meta (kode, subkode, jejak) disertakan supaya penyebabnya bisa dilacak atau dilaporkan.
+    const e = j.error || {};
+    const detail = [`HTTP ${r.status}`, e.type, e.code != null && `kode ${e.code}`, e.error_subcode != null && `sub ${e.error_subcode}`, e.fbtrace_id && `trace ${e.fbtrace_id}`].filter(Boolean).join(' · ');
+    const userMsg = e.error_user_msg && e.error_user_msg !== e.message ? ` — ${e.error_user_msg}` : '';
+    const err = new Error(`Instagram: ${e.message || `HTTP ${r.status}`}${userMsg} [${detail}]`) as Error & { ambiguous?: boolean };
     // Error umum ("An unknown error has occurred", kode 1/2, atau bertanda sementara) kadang dikirim Instagram
     // padahal pesannya sudah terkirim, jadi hasilnya belum pasti.
     err.ambiguous = j.error?.code === 1 || j.error?.code === 2 || j.error?.is_transient === true || r.status >= 500;
