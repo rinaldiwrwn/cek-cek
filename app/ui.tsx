@@ -345,7 +345,7 @@ export function Dashboard() {
             Komentar terakhir dibaca {p.lastSync ? time(p.lastSync) : 'belum pernah'}.{' '}
             <button className="mini" onClick={() => act({ type: 'sync', id: p.id })}>↻ Muat ulang komentar</button>
           </p>
-          <Detail p={p} result={state.results.find((r) => r.postId === p.id)} followups={state.followups} act={act} />
+          <Detail p={p} result={state.results.find((r) => r.postId === p.id)} followups={state.followups} customers={state.customers} advanced={state.autoFollowup.on} act={act} />
         </section>
       ))}
       {state.posts.length > 0 && !open && <p className="muted small hint">Geser ke samping untuk melihat lelang lain. Ketuk satu lelang untuk melihat bid-nya.</p>}
@@ -634,7 +634,7 @@ function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Pro
 }
 
 /** Status chat lanjutan untuk pemenang pada hari itu, dengan isi pesannya dan tombol kirim manual. */
-function FollowupLine({ f, act }: { f: Followup; act: (b: unknown) => Promise<void> }) {
+function FollowupLine({ f, isCustomer, advanced, act }: { f: Followup; isCustomer: boolean; advanced: boolean; act: (b: unknown) => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const what = f.kind === 'new' || f.preview?.kind === 'new' ? 'permintaan alamat' : 'rekap total';
   const text = f.text || f.preview?.text || '';
@@ -648,15 +648,30 @@ function FollowupLine({ f, act }: { f: Followup; act: (b: unknown) => Promise<vo
     );
   }
   if (f.status === 'sending') return <span className="muted small">💬 Chat lanjutan sedang dikirim…</span>;
-  const label = f.status === 'failed' ? `gagal${f.error ? `: ${f.error}` : ''}` : f.status === 'unsure' ? 'belum pasti, cek kotak pesan' : f.status === 'expired' ? f.reason || 'jendela balasan habis' : f.reason || 'menunggu';
+  // Mode manual (auto-chat mati): cukup tunjukkan apakah isinya sudah siap disalin. Rincian teknis hanya untuk mode otomatis.
+  const manualLabel = !f.preview ? 'belum ada isi' : f.preview.complete ? 'siap disalin dan dikirim manual' : 'belum final, masih menunggu lelang atau DM lain hari itu';
+  const label = !advanced ? manualLabel : f.status === 'failed' ? `gagal${f.error ? `: ${f.error}` : ''}` : f.status === 'unsure' ? 'belum pasti, cek kotak pesan' : f.status === 'expired' ? f.reason || 'jendela balasan habis' : f.reason || 'menunggu';
   return (
     <span className={f.status === 'waiting' ? 'muted small' : 'small warnline'}>
       💬 Chat lanjutan: {label}{' '}
       {text && <button className="mini" onClick={() => setOpen(!open)}>{open ? 'Tutup' : 'Lihat isinya'}</button>}
       {text && <button className="mini" onClick={() => copyText(text)}>Salin pesan</button>}
       <a className="mini linkbtn" href={`https://ig.me/m/${f.username}`} target="_blank" rel="noreferrer">Buka chat</a>
-      <button className="mini" onClick={async () => { try { const j = await api('/api/action', { type: 'fudiag', username: f.username, day: f.day }); alert(j.lines.join('\n\n')); } catch (e) { alert((e as Error).message); } }}>Diagnosa</button>
-      <button className="mini" onClick={() => confirm(`Kirim chat lanjutan (${what}) ke @${f.username} sekarang?\n\n${text}\n\nPelanggan harus sudah membalas DM-mu dalam 24 jam terakhir, kalau belum Instagram menolaknya.`) && act({ type: 'followup', username: f.username, day: f.day })}>Kirim sekarang</button>
+      {!isCustomer && (
+        <button className="mini" onClick={async () => {
+          const ong = prompt(`Ongkir @${f.username} (ribuan, mis. 18). Disimpan sebagai pelanggan lama:`);
+          if (ong == null || ong.trim() === '' || !Number.isFinite(Number(ong))) return;
+          const g = prompt('Sapaan: ketik "om" atau "ka" (kaa)', 'om');
+          if (g == null) return;
+          await act({ type: 'customer', username: f.username, ongkir: Number(ong), greeting: g.trim().toLowerCase() === 'ka' ? 'ka' : 'om' });
+        }}>Jadikan pelanggan lama</button>
+      )}
+      {advanced && (
+        <>
+        <button className="mini" onClick={async () => { try { const j = await api('/api/action', { type: 'fudiag', username: f.username, day: f.day }); alert(j.lines.join('\n\n')); } catch (e) { alert((e as Error).message); } }}>Diagnosa</button>
+        <button className="mini" onClick={() => confirm(`Kirim chat lanjutan (${what}) ke @${f.username} sekarang?\n\n${text}\n\nPelanggan harus sudah membalas DM-mu dalam 24 jam terakhir, kalau belum Instagram menolaknya.`) && act({ type: 'followup', username: f.username, day: f.day })}>Kirim sekarang</button>
+        </>
+      )}
       {open && text && <span className="small pre">{text}{f.preview && !f.preview.complete && !f.text ? '\n\n(Belum final: masih menunggu lelang atau DM lain hari itu.)' : ''}</span>}
     </span>
   );
@@ -728,7 +743,7 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
 }
 
 /** Penetapan hasil lelang: pemenang dipilih dari pemilik bid sah (usulan: yang tertinggi), atau "No Winner". Bisa diubah kapan saja. */
-function ResultBox({ p, result, followup, act }: { p: Post; result?: Result; followup?: Followup; act: (b: unknown) => Promise<void> }) {
+function ResultBox({ p, result, followup, customers, advanced, act }: { p: Post; result?: Result; followup?: Followup; customers: State['customers']; advanced: boolean; act: (b: unknown) => Promise<void> }) {
   // Bid sah tertinggi tiap akun, dari yang terbesar.
   const best = new Map<string, number>();
   const testUsers = new Set(p.rows.filter((r) => r.isTest).map((r) => r.username));
@@ -765,7 +780,7 @@ function ResultBox({ p, result, followup, act }: { p: Post; result?: Result; fol
           <span className="small warnline" title={result.dm.error || undefined}>⚠ Instagram melapor error saat DM ke @{result.dm.username}, tapi DM mungkin sudah sampai. Cek kotak pesan penerima sebelum kirim ulang.</span>
         )}
         {result.status === 'winner' && result.dm?.status === 'sending' && <span className="muted small">DM sedang dikirim…</span>}
-        {followup && <FollowupLine f={followup} act={act} />}
+        {followup && <FollowupLine f={followup} isCustomer={customers.some((c) => c.username === followup.username)} advanced={advanced} act={act} />}
         {result.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && (
           <button
             className="mini dmbtn"
@@ -860,7 +875,7 @@ function Winners({ results: all }: { results: Result[] }) {
   );
 }
 
-function Detail({ p, result, followups, act }: { p: Post; result?: Result; followups: Followup[]; act: (b: unknown) => Promise<void> }) {
+function Detail({ p, result, followups, customers, advanced, act }: { p: Post; result?: Result; followups: Followup[]; customers: State['customers']; advanced: boolean; act: (b: unknown) => Promise<void> }) {
   const [all, setAll] = useState(false);
   const [form, setForm] = useState({ closeAt: toInput(p.closeAt), openBid: p.openBid ?? '', increment: p.increment ?? '', maxJump: p.maxJump ?? '' });
   const rows = p.rows.filter((r) => all || r.isBid);
@@ -886,7 +901,7 @@ function Detail({ p, result, followups, act }: { p: Post; result?: Result; follo
         ))}
       </ul>
 
-      <ResultBox p={p} result={result} followup={result?.status === 'winner' && result.closeAt ? followups.find((f) => f.username === result.username && f.day === dayKey(result.closeAt!)) : undefined} act={act} />
+      <ResultBox p={p} result={result} customers={customers} advanced={advanced} followup={result?.status === 'winner' && result.closeAt ? followups.find((f) => f.username === result.username && f.day === dayKey(result.closeAt!)) : undefined} act={act} />
 
       <h2>Aturan lelang <span className="muted small">(nominal dalam ribuan)</span></h2>
       <form
