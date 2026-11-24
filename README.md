@@ -55,6 +55,10 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   18:59:59") kalau sudah terbaca, dan jam saat Instagram membalas permintaan ("terkirim") kalau belum.
 - Pemenang bawaan ditetapkan 15 detik setelah close (`AUTO_RESULT_GRACE_SEC`), menunggu komentar menit-menit terakhir
   yang telat terbaca.
+- Tombol **🧪 Tes DM** di detail lelang menguji DM ke akun lain (mis. akun kedua milikmu) tanpa menetapkan pemenang:
+  pilih akun yang sudah berkomentar di postingan itu, periksa isinya (DM pemenang ditambah tautan postingan), lalu kirim.
+  Komentar akun itu dibaca langsung dari Instagram kalau postingannya sudah lama. Satu komentar hanya bisa dibalas satu
+  kali oleh Instagram, jadi tiap uji butuh komentar baru. Template DM mendukung `{tautan}` (alamat postingan lelang).
 - Tombol **Ulang** di samping komentar yang sudah terkirim mengembalikannya ke status terjadwal (untuk uji kirim
   yang komentarnya sudah dihapus di Instagram).
 - Sniper Zone hanya aktif kalau lelang itu punya minimal 2 bid sah sebelum zonanya dimulai. Kalau kurang, komentar

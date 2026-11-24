@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { addVerifiedMany, getState, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, setAutoDm, setAutoReply, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
+import { addVerifiedMany, getState, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, testDm, setAutoDm, setAutoReply, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -31,6 +31,7 @@ async function action(req: Request) {
     else if (b.type === 'override') await setOverride(String(b.id), ['valid', 'invalid', 'wrong'].includes(b.value) ? b.value : null);
     else if (b.type === 'send' && ['ten', 'sniper', 'close'].includes(b.kind)) await sendNow(String(b.id), b.kind);
     else if (b.type === 'reset' && ['ten', 'sniper', 'close'].includes(b.kind)) await resetEvent(String(b.id), b.kind);
+    else if (b.type === 'testdm' && typeof b.username === 'string') return json({ ok: true, ...(await testDm(String(b.id), b.username, typeof b.text === 'string' ? b.text : undefined, !!b.preview)) });
     else if (b.type === 'autodm') await setAutoDm(!!b.on);
     else if (b.type === 'dm') await sendWinnerDm(String(b.id), String(b.text ?? ''));
     else if (b.type === 'autoreply') await setAutoReply(!!b.on);

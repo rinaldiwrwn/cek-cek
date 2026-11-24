@@ -1,7 +1,7 @@
 // Inti sistem: sinkron postingan & komentar, komentar terjadwal, dan data untuk dashboard.
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
-import { amountText, cleanUsername, parseCaption, splitUsernames } from './parse';
+import { amountText, cleanUsername, parseBid, parseCaption, splitUsernames } from './parse';
 import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -635,7 +635,8 @@ export async function sendWinnerDm(postId: string, text: string) {
   if (message.length > 900) throw new Error('Pesan terlalu panjang');
   const res = (await q('SELECT * FROM results WHERE post_id = $1', [postId]))[0];
   if (!res || res.status !== 'winner') throw new Error('Belum ada pemenang yang ditetapkan');
-  const finalText = message || dmMessage(dmTemplate(), res.title, res.amount);
+  const link = (await q('SELECT permalink FROM posts WHERE id = $1', [postId]))[0]?.permalink;
+  const finalText = message || dmMessage(dmTemplate(), res.title, res.amount, link);
   const ev = await evalPost(postId);
   if (!ev) throw new Error('Lelang tidak ditemukan');
   const mine = ev.rows.filter((r) => !r.own && !r.deleted && r.username === res.username);
@@ -643,6 +644,38 @@ export async function sendWinnerDm(postId: string, text: string) {
   const pick = [...mine.filter((r) => r.isBid && r.amount === res.amount), ...mine].sort((a, b) => Number(b.isBid && b.amount === res.amount) - Number(a.isBid && a.amount === res.amount) || b.ts - a.ts)[0];
   if (!pick) throw new Error('Tidak ada komentar pemenang ini yang bisa dibalas lewat DM');
   await deliverDm(postId, res.username, pick, finalText, false);
+}
+
+/**
+ * Uji kirim DM ke akun lain (mis. akun kedua milikmu) tanpa menetapkan pemenang atau mengubah apa pun di dashboard.
+ * Membalas komentar terbaru akun itu di lelang yang dipilih, dengan isi DM pemenang ditambah tautan postingannya.
+ * Satu komentar hanya bisa dibalas satu kali oleh Instagram, jadi tiap uji butuh komentar baru.
+ */
+export async function testDm(postId: string, rawUser: string, text?: string, preview = false) {
+  const username = cleanUsername(rawUser);
+  if (!username) throw new Error('Username tidak valid');
+  const post = (await q('SELECT title, permalink FROM posts WHERE id = $1', [postId]))[0];
+  if (!post) throw new Error('Lelang tidak ditemukan');
+  type C = { id: string; parentId: string | null; text: string; ts: number };
+  let cands: C[] = (await q('SELECT id, parent_id, text, ts FROM comments WHERE post_id = $1 AND username = $2 AND deleted_at IS NULL ORDER BY ts DESC', [postId, username]))
+    .map((c) => ({ id: c.id, parentId: c.parent_id, text: c.text, ts: toMs(c.ts)! }));
+  if (!cands.length) {
+    // Postingan lama tidak disinkronkan lagi, jadi komentarnya dibaca langsung dari Instagram, tanpa disimpan.
+    cands = (await ig.listComments(postId)).filter((c) => c.username === username).sort((a, b) => b.ts - a.ts);
+  }
+  if (!cands.length) throw new Error(`Belum ada komentar dari @${username} di postingan ini. Tulis komentar dulu dari akun itu, lalu coba lagi.`);
+  const pick = cands.find((c) => !c.parentId) ?? cands[0];
+  const parsed = parseBid(pick.text);
+  const tpl = dmTemplate();
+  // Harga hanya bisa dibaca dari komentar angka biasa; untuk "+50" dan sejenisnya diberi penanda supaya kamu isi sendiri.
+  const harga = parsed?.kind === 'abs' ? amountText(parsed.value) : '[harga]';
+  const message = dmMessage((tpl.includes('{tautan}') ? tpl : `${tpl}\n{tautan}`).replace(/\{harga\}/g, harga), post.title, null, post.permalink);
+  if (preview) return { username, comment: pick.text, text: message };
+  const final = String(text || '').trim() || message;
+  if (final.length > 900) throw new Error('Pesan terlalu panjang');
+  if (Date.now() - pick.ts > DM_WINDOW) throw new Error('Komentar itu sudah lebih dari 7 hari, melewati batas Instagram untuk DM lewat komentar');
+  await ig.sendPrivateReply(pick.id, final);
+  return { username, comment: pick.text, text: final, sent: true };
 }
 
 /**
@@ -669,7 +702,8 @@ export async function autoDms() {
     if (!bid) continue; // tidak memenuhi syarat: tidak ada DM otomatis, bisa dikirim manual
     budget--;
     try {
-      await deliverDm(res.post_id, res.username, bid, dmMessage(dmTemplate(), res.title, res.amount), true);
+      const link = (await q('SELECT permalink FROM posts WHERE id = $1', [res.post_id]))[0]?.permalink;
+      await deliverDm(res.post_id, res.username, bid, dmMessage(dmTemplate(), res.title, res.amount, link), true);
     } catch (e) {
       await noteError(`DM otomatis ke @${res.username} gagal: ${String((e as Error)?.message || e)}`);
     }
@@ -707,7 +741,7 @@ export async function getState() {
     q('SELECT e.*, c.ts AS ig_ts FROM events e LEFT JOIN comments c ON c.id = e.comment_id'),
     q('SELECT b.username, b.source FROM bidders b WHERE b.username IN (SELECT DISTINCT username FROM comments)'),
     q('SELECT count(*)::int AS n FROM bidders'),
-    q('SELECT * FROM results ORDER BY close_at DESC NULLS LAST'),
+    q('SELECT r.*, p.permalink FROM results r LEFT JOIN posts p ON p.id = r.post_id ORDER BY r.close_at DESC NULLS LAST'),
     getKv<{ username: string }>('me'),
     getKv<{ message: string; at: number }>('lastError'),
     getKv<number>('lastOk'),
@@ -739,7 +773,7 @@ export async function getState() {
     results: results.map((r) => ({
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,
       amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null, auto: !!r.auto,
-      dmText: dmMessage(dmTemplate(), r.title, r.amount),
+      dmText: dmMessage(dmTemplate(), r.title, r.amount, r.permalink),
       dm: r.dm_status ? { status: r.dm_status as 'sending' | 'sent' | 'failed', username: r.dm_username as string | null, at: toMs(r.dm_at), error: r.dm_error as string | null, auto: !!r.dm_auto } : null,
     })),
     posts: posts.map((p) => {
