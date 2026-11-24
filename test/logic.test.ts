@@ -222,7 +222,7 @@ test('isi DM pemenang memuat nama barang dan harga menang', () => {
   assert.equal(dmMessage(DM_TEMPLATE, 'Seiko 5', 1500), 'Menang yaa untuk lelang Seiko 5 di harga 1.500k 🥳');
   assert.equal(dmMessage(DM_TEMPLATE, '', 100), 'Menang yaa untuk lelang ini di harga 100rb 🥳');
   // {tautan} diisi alamat postingan; tanpa tautan, barisnya dibuang rapi
-  assert.equal(dmMessage(`${DM_TEMPLATE}\n{tautan}`, 'Jam A', 300, 'https://www.instagram.com/p/AbC/'), 'Menang yaa untuk lelang Jam A di harga 300rb 🥳\nhttps://www.instagram.com/p/AbC/');
+  assert.equal(dmMessage(DM_TEMPLATE, 'Jam A', 300, 'https://www.instagram.com/p/AbC/'), 'Menang yaa untuk lelang Jam A di harga 300rb 🥳\nhttps://www.instagram.com/p/AbC/');
   assert.equal(dmMessage(`${DM_TEMPLATE}\n{tautan}`, 'Jam A', 300, null), 'Menang yaa untuk lelang Jam A di harga 300rb 🥳');
   assert.equal(dmMessage('{harga} untuk {barang}, {barang}!', 'Jam A', 50), '50rb untuk Jam A, Jam A!');
 });

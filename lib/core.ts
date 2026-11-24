@@ -667,10 +667,11 @@ export async function testDm(postId: string, rawUser: string, text?: string, pre
   const pick = cands.find((c) => !c.parentId) ?? cands[0];
   const parsed = parseBid(pick.text);
   const tpl = dmTemplate();
-  // Harga hanya bisa dibaca dari komentar angka biasa; untuk "+50" dan sejenisnya diberi penanda supaya kamu isi sendiri.
-  const harga = parsed?.kind === 'abs' ? amountText(parsed.value) : '[harga]';
+  // Harga uji dibaca dari komentar angka biasa ("tes, 300"). Kalau tidak terbaca, dipakai harga contoh dan diberi tahu.
+  const hargaContoh = parsed?.kind !== 'abs';
+  const harga = parsed?.kind === 'abs' ? amountText(parsed.value) : amountText(300);
   const message = dmMessage((tpl.includes('{tautan}') ? tpl : `${tpl}\n{tautan}`).replace(/\{harga\}/g, harga), post.title, null, post.permalink);
-  if (preview) return { username, comment: pick.text, text: message };
+  if (preview) return { username, comment: pick.text, commentAt: pick.ts, hargaContoh, text: message };
   const final = String(text || '').trim() || message;
   if (final.length > 900) throw new Error('Pesan terlalu panjang');
   if (Date.now() - pick.ts > DM_WINDOW) throw new Error('Komentar itu sudah lebih dari 7 hari, melewati batas Instagram untuk DM lewat komentar');

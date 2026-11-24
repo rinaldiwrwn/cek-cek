@@ -260,7 +260,7 @@ export function Dashboard() {
           className={state.autoDm.on ? 'on-switch' : ''}
           aria-pressed={state.autoDm.on}
           onClick={() => {
-            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]') + '" sekitar ' + (state.dmDelaySec >= 60 ? `${Math.round(state.dmDelaySec / 60)} menit` : `${Math.round(state.dmDelaySec)} detik`) + ' kemudian, hanya kalau bid kemenangannya sudah disahkan, harganya pasti, dan tidak melanggar aturan lelang. Bid yang masih perlu kamu cek tidak memicu DM. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
+            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]').replace('{tautan}', '[tautan postingan]') + '" sekitar ' + (state.dmDelaySec >= 60 ? `${Math.round(state.dmDelaySec / 60)} menit` : `${Math.round(state.dmDelaySec)} detik`) + ' kemudian, hanya kalau bid kemenangannya sudah disahkan, harganya pasti, dan tidak melanggar aturan lelang. Bid yang masih perlu kamu cek tidak memicu DM. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
             act({ type: 'autodm', on: !state.autoDm.on });
           }}
         >
@@ -773,7 +773,8 @@ function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown
             if (!user || !user.trim()) return;
             try {
               const pv = await api('/api/action', { type: 'testdm', id: p.id, username: user, preview: true });
-              const text = prompt(`Komentar @${pv.username} yang akan dibalas: "${pv.comment}"\n\nIsi DM (bisa diedit, OK untuk mengirim ke @${pv.username}):`, pv.text);
+              const note = pv.hargaContoh ? `\nHarga tidak terbaca dari komentar itu, jadi dipakai harga contoh 300rb. Tulis angka biasa (mis. "tes, 300") kalau mau memakai harga dari komentar.` : '';
+              const text = prompt(`Komentar @${pv.username} (${time(pv.commentAt)}) yang akan dibalas: "${pv.comment}"${note}\n\nIsi DM (bisa diedit, OK untuk mengirim ke @${pv.username}):`, pv.text);
               if (!text || !text.trim()) return;
               await api('/api/action', { type: 'testdm', id: p.id, username: user, text: text.trim() });
               alert(`DM tes terkirim. Cek DM atau permintaan pesan di akun @${pv.username}.`);

@@ -156,7 +156,7 @@ export function winnerBidForDm(rows: BidRow[], winner: { username: string; amoun
   return ok.sort((a, b) => b.ts - a.ts)[0] ?? null;
 }
 
-export const DM_TEMPLATE = 'Menang yaa untuk lelang {barang} di harga {harga} 🥳';
+export const DM_TEMPLATE = 'Menang yaa untuk lelang {barang} di harga {harga} 🥳\n{tautan}';
 
 /**
  * Mengisi template DM pemenang: {barang} dengan nama barang/jam lelangnya, {harga} dengan harga menang (dalam ribuan),
