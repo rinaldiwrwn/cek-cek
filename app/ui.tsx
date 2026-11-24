@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
 import { amountText, extractUsernames } from '@/lib/parse';
-import { dayKey, fmtNum, greetingWord, normalizeGreeting, nextGreeting, type Greeting } from '@/lib/followup';
+import { cleanGreeting, dayKey, fmtNum, GREETING_MAX, greetingWord } from '@/lib/followup';
 
 /** Angka dari isian: koma atau titik sebagai desimal (18,5 atau 18.5). */
 const parseNum = (s: string) => Number(String(s).trim().replace(',', '.'));
@@ -664,9 +664,9 @@ function FollowupLine({ f, isCustomer, advanced, act }: { f: Followup; isCustome
         <button className="mini" onClick={async () => {
           const ong = prompt(`Ongkir @${f.username} (ribuan, mis. 18). Disimpan sebagai pelanggan lama:`);
           if (ong == null || ong.trim() === '' || !Number.isFinite(parseNum(ong))) return;
-          const g = prompt('Sapaan: ketik "om", "ka" (kaa), atau "mann"', 'om');
+          const g = prompt('Sapaan untuk pesan (bebas diketik, mis. om, ka, Mann). Kosong = om:', 'om');
           if (g == null) return;
-          await act({ type: 'customer', username: f.username, ongkir: parseNum(ong), greeting: normalizeGreeting(g.trim().toLowerCase()) });
+          await act({ type: 'customer', username: f.username, ongkir: parseNum(ong), greeting: cleanGreeting(g) });
         }}>Jadikan pelanggan lama</button>
       )}
       {advanced && (
@@ -694,7 +694,7 @@ async function copyText(text: string) {
 function CustomersPanel({ customers, packingNote, act }: { customers: State['customers']; packingNote: boolean; act: (b: unknown) => Promise<void> }) {
   const [user, setUser] = useState('');
   const [ongkir, setOngkir] = useState('');
-  const [greeting, setGreeting] = useState<Greeting>('om');
+  const [greeting, setGreeting] = useState('');
   const [find, setFind] = useState('');
   const shown = customers.filter((c) => c.username.includes(find.trim().replace(/^@/, '').toLowerCase()));
   const save = async (username: string, ong: string, g: string) => {
@@ -718,15 +718,16 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
           await save(user, ongkir, greeting);
           setUser('');
           setOngkir('');
+          setGreeting(''); // dikosongkan juga, supaya sapaan khusus tidak terbawa ke akun berikutnya
         }}
       >
         <input placeholder="@username" value={user} onChange={(e) => setUser(e.target.value)} aria-label="Username" />
         <input placeholder="Ongkir (rb)" inputMode="decimal" value={ongkir} onChange={(e) => setOngkir(e.target.value.replace(/[^0-9.,]/g, ''))} aria-label="Ongkir dalam ribuan" />
-        <select value={greeting} onChange={(e) => setGreeting(normalizeGreeting(e.target.value))} aria-label="Sapaan">
-          <option value="om">om</option>
-          <option value="ka">kaa</option>
-          <option value="mann">mann</option>
-        </select>
+        <input placeholder="Sapaan (om)" value={greeting} maxLength={GREETING_MAX} list="sapaan-saran" onChange={(e) => setGreeting(e.target.value)} aria-label="Sapaan" />
+        <datalist id="sapaan-saran">
+          <option value="om" />
+          <option value="ka" />
+        </datalist>
         <button className="primary" type="submit">{existing ? 'Perbarui' : 'Simpan'}</button>
       </form>
       {existing && (
@@ -743,7 +744,7 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
             </span>
             <span>
               <button className="mini" onClick={() => { const v = prompt(`Ongkir baru untuk @${c.username} (ribuan):`, fmtNum(c.ongkir)); if (v != null && v.trim() !== '' && Number.isFinite(parseNum(v))) save(c.username, v.trim(), c.greeting); }}>Ubah ongkir</button>
-              <button className="mini" onClick={() => save(c.username, String(c.ongkir), nextGreeting(c.greeting))}>Sapaan: {greetingWord(c.greeting)}</button>
+              <button className="mini" onClick={() => { const g = prompt(`Sapaan untuk @${c.username} (bebas diketik, mis. om, ka, Mann):`, greetingWord(c.greeting) === 'kaa' ? 'ka' : greetingWord(c.greeting)); if (g != null) save(c.username, String(c.ongkir), g); }}>Sapaan: {greetingWord(c.greeting)}</button>
               <button className="mini" onClick={() => confirm(`Hapus @${c.username} dari pelanggan lama?`) && act({ type: 'delcustomer', username: c.username })}>Hapus</button>
             </span>
           </li>

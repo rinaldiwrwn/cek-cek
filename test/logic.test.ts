@@ -368,11 +368,15 @@ test('chat lanjutan: rekap pelanggan lama dan permintaan alamat pelanggan baru',
   // Total sejuta ke atas memakai penulisan k.
   assert.match(recapMessage({ amounts: [1500], ongkir: 20, packing: 5 }).text, /=1\.525k yaa om/);
 
-  // Sapaan: om, ka (ditulis kaa), mann; yang tidak dikenal menjadi om.
-  assert.equal(recapMessage({ amounts: [300], ongkir: 10, greeting: 'mann', packing: 5, transfer: '123' }).text, 'Untuk totalnya jadi 300+5+10=315rb yaa mann\n\nTransfernya kesini ya mann:\n123');
-  assert.equal(recapMessage({ amounts: [300], ongkir: 10, greeting: 'bro', packing: 5 }).text, 'Untuk totalnya jadi 300+5+10=315rb yaa om');
-  const { nextGreeting } = await import('../lib/followup');
-  assert.deepEqual(['om', 'ka', 'mann', 'mann'].map(nextGreeting), ['ka', 'mann', 'om', 'om']);
+  // Sapaan bebas: ditulis apa adanya (huruf besar kecil ikut), "ka" ditulis "kaa", kosong menjadi om, dirapikan dan dibatasi 20 karakter.
+  const sap = (g: string | null | undefined) => recapMessage({ amounts: [300], ongkir: 10, greeting: g, packing: 5 }).text.split('\n')[0];
+  assert.equal(sap('Mann'), 'Untuk totalnya jadi 300+5+10=315rb yaa Mann');
+  assert.equal(sap('ka'), 'Untuk totalnya jadi 300+5+10=315rb yaa kaa');
+  assert.equal(sap('  bro   besar '), 'Untuk totalnya jadi 300+5+10=315rb yaa bro besar');
+  assert.equal(sap(''), 'Untuk totalnya jadi 300+5+10=315rb yaa om');
+  assert.equal(sap(null), 'Untuk totalnya jadi 300+5+10=315rb yaa om');
+  assert.equal(sap('x'.repeat(40)), 'Untuk totalnya jadi 300+5+10=315rb yaa ' + 'x'.repeat(20));
+  assert.equal(sap('a\nb'), 'Untuk totalnya jadi 300+5+10=315rb yaa a b');
 
   // Ongkir desimal ditulis dengan koma, sama seperti webapp ongkir.
   assert.equal(recapMessage({ amounts: [350], ongkir: 18.5, greeting: 'om', packing: 5 }).text, 'Untuk totalnya jadi 350+5+18,5=373,5rb yaa om');
