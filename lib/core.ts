@@ -757,11 +757,11 @@ export async function setAutoFollowup(on: boolean) {
 export async function setCustomer(rawUser: string, ongkir: number, greeting: string) {
   const username = cleanUsername(rawUser);
   if (!username) throw new Error('Username tidak valid');
-  if (!Number.isFinite(ongkir) || ongkir < 0 || ongkir > 100_000) throw new Error('Ongkir tidak valid (isi dalam ribuan, mis. 18)');
+  if (!Number.isFinite(ongkir) || ongkir < 0 || ongkir > 100_000) throw new Error('Ongkir tidak valid (isi dalam ribuan, mis. 18 atau 18,5)');
   await q(
     `INSERT INTO customers (username, ongkir, greeting, updated_at) VALUES ($1,$2,$3,$4)
      ON CONFLICT (username) DO UPDATE SET ongkir = $2, greeting = $3, updated_at = $4`,
-    [username, Math.round(ongkir), greeting === 'ka' ? 'ka' : 'om', iso(Date.now())],
+    [username, Math.round(ongkir * 100) / 100, greeting === 'ka' ? 'ka' : 'om', iso(Date.now())],
   );
 }
 

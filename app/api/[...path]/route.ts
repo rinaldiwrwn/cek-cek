@@ -1,5 +1,5 @@
 import { after, NextResponse } from 'next/server';
-import { checkPassword, COOKIE, cronAuthed, isAuthed, sessionValue } from '@/lib/auth';
+import { checkPassword, COOKIE, cronAuthed, customerAuthed, isAuthed, sessionValue } from '@/lib/auth';
 import { addVerifiedMany, getState, syncAllComments, syncPostNow, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, testDm, setAutoDm, setAutoReply, setAutoFollowup, setCustomer, removeCustomer, processFollowup, diagnoseFollowup, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
@@ -81,6 +81,18 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     if (!cronAuthed(req)) return json({ error: 'Tidak diizinkan' }, 401);
     after(() => tick(true).catch(console.error));
     return json({ ok: true });
+  }
+
+  // Dari webapp ongkir: menyimpan pelanggan lama (username, ongkir dalam ribuan, sapaan). Memakai token sendiri, bukan sesi dashboard.
+  if (name === 'customer' && post) {
+    if (!customerAuthed(req)) return json({ error: 'Tidak diizinkan' }, 401);
+    const b = await req.json().catch(() => ({}));
+    try {
+      await setCustomer(String(b.username ?? ''), Number(b.ongkir), String(b.greeting ?? 'om'));
+      return json({ ok: true });
+    } catch (e) {
+      return json({ error: String((e as Error).message) }, 400);
+    }
   }
 
   if (!(await isAuthed())) return denied();
