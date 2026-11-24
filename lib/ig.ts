@@ -204,23 +204,43 @@ export async function sendMessage(recipientId: string, text: string): Promise<st
   return String(j.message_id ?? j.id ?? '');
 }
 
-/** Kapan pelanggan itu terakhir mengirim pesan ke akunmu (ms), atau null kalau belum pernah. */
-export async function lastCustomerMessageAt(recipientId: string): Promise<number | null> {
-  if (isMock()) return mock.lastCustomerMessageAt(recipientId);
+/**
+ * Kapan pelanggan itu terakhir mengirim pesan ke akunmu (ms), atau null kalau tidak terbaca. Percakapan dicari lewat ID
+ * penerima; kalau kosong, dicari di percakapan terbaru berdasarkan ID atau username peserta. Pesan "dari pelanggan"
+ * adalah semua pesan yang bukan dari akunmu sendiri. `debug` merangkum yang terbaca, untuk diagnosis.
+ */
+export async function lastCustomerMessageAt(recipientId: string, username?: string): Promise<{ at: number | null; debug: string }> {
+  if (isMock()) return { at: mock.lastCustomerMessageAt(recipientId), debug: 'mock' };
   const a = await account();
   const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
-  const j = await request(
-    `${a.base}${ver()}/${id}/conversations?platform=instagram&user_id=${encodeURIComponent(recipientId)}&fields=messages.limit(10){id,created_time,from}`,
-  );
+  const fields = 'participants,messages.limit(15){id,created_time,from}';
+  const base = `${a.base}${ver()}/${id}/conversations?platform=instagram`;
+  const own = new Set([String(a.id), String(id)]);
+  const ownName = String(a.username || '').toLowerCase();
+  const want = String(username || '').toLowerCase();
+
+  let convs: any[] = ((await request(`${base}&user_id=${encodeURIComponent(recipientId)}&fields=${fields}`)).data || []) as any[];
+  let via = 'user_id';
+  if (!convs.length) {
+    via = 'daftar';
+    const all: any[] = ((await request(`${base}&limit=25&fields=${fields}`)).data || []) as any[];
+    convs = all.filter((c) => (c.participants?.data || []).some((p: any) => String(p.id) === String(recipientId) || (want && String(p.username || '').toLowerCase() === want)));
+  }
   let last: number | null = null;
-  for (const conv of j.data || []) {
+  let msgs = 0;
+  const senders = new Set<string>();
+  for (const conv of convs) {
     for (const m of conv.messages?.data || []) {
-      if (String(m.from?.id) !== String(recipientId)) continue; // hanya pesan dari pelanggan
+      msgs++;
+      const fid = String(m.from?.id ?? '');
+      const fname = String(m.from?.username || '').toLowerCase();
+      senders.add(fname || fid);
+      if (own.has(fid) || (ownName && fname === ownName)) continue; // pesan dari akunmu sendiri
       const t = parseTs(m.created_time);
       if (last == null || t > last) last = t;
     }
   }
-  return last;
+  return { at: last, debug: `via ${via}, percakapan ${convs.length}, pesan ${msgs}, pengirim ${[...senders].join('/') || '-'}` };
 }
 
 /** Membalas sebuah komentar (harus komentar tingkat atas; balasan atas balasan tidak didukung Instagram). */
