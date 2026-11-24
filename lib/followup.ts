@@ -68,7 +68,7 @@ export function recapMessage(o: { amounts: number[]; ongkir: number; greeting?: 
   const { expression, total } = recapExpression(o.amounts, o.ongkir, o.packing);
   const lines = [`Untuk totalnya jadi ${expression}=${fmtRbK(total)} yaa ${g}`];
   const t = String(o.transfer || '').trim();
-  if (t) lines.push('', `Transfernya kesini ya ${g}:`, t);
+  if (t) lines.push('', 'Transfernya kesini yaa:', t); // tanpa sapaan, sama dengan webapp ongkir
   return { text: lines.join('\n'), total };
 }
 

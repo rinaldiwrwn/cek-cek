@@ -364,7 +364,7 @@ test('chat lanjutan: rekap pelanggan lama dan permintaan alamat pelanggan baru',
   // Empat barang: harga+packing diulang per barang, ongkir di akhir. Sapaan "ka" jadi "kaa", info transfer ikut.
   const r = recapMessage({ amounts: [350, 200, 100, 120], ongkir: 18, greeting: 'ka', transfer: '123 a/n X', packing: 5 });
   assert.equal(r.total, 350 + 200 + 100 + 120 + 4 * 5 + 18);
-  assert.equal(r.text, 'Untuk totalnya jadi 350+5+200+5+100+5+120+5+18=808rb yaa kaa\n\nTransfernya kesini ya kaa:\n123 a/n X');
+  assert.equal(r.text, 'Untuk totalnya jadi 350+5+200+5+100+5+120+5+18=808rb yaa kaa\n\nTransfernya kesini yaa:\n123 a/n X');
   // Total sejuta ke atas memakai penulisan k.
   assert.match(recapMessage({ amounts: [1500], ongkir: 20, packing: 5 }).text, /=1\.525k yaa om/);
 
