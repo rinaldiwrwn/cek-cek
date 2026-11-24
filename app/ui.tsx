@@ -766,6 +766,24 @@ function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown
       </form>
 
       <div className="toolbar">
+        <button
+          title="Uji kirim DM (isi DM pemenang + tautan postingan) ke akun lain, tanpa menetapkan pemenang"
+          onClick={async () => {
+            const user = prompt('Tes DM: kirim ke akun mana? Akun itu harus sudah berkomentar di postingan ini. Tulis username-nya saja, tanpa @.', '');
+            if (!user || !user.trim()) return;
+            try {
+              const pv = await api('/api/action', { type: 'testdm', id: p.id, username: user, preview: true });
+              const text = prompt(`Komentar @${pv.username} yang akan dibalas: "${pv.comment}"\n\nIsi DM (bisa diedit, OK untuk mengirim ke @${pv.username}):`, pv.text);
+              if (!text || !text.trim()) return;
+              await api('/api/action', { type: 'testdm', id: p.id, username: user, text: text.trim() });
+              alert(`DM tes terkirim. Cek DM atau permintaan pesan di akun @${pv.username}.`);
+            } catch (e) {
+              alert((e as Error).message);
+            }
+          }}
+        >
+          🧪 Tes DM
+        </button>
         <a href={p.permalink} target="_blank" rel="noreferrer">Buka di Instagram</a>
       </div>
     </div>
