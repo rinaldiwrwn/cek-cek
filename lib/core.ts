@@ -919,13 +919,33 @@ export async function getState() {
     q('SELECT username, ongkir, greeting FROM customers ORDER BY username'),
     q(`SELECT * FROM followups WHERE day >= $1 ORDER BY day DESC, username`, [dayKey(Date.now() - 3 * DAY_MS)]),
   ]);
-  const followups = await Promise.all(
+  const followups: { username: string; day: string; status: 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired'; kind: 'recap' | 'new' | null; text: string | null; reason: string | null; error: string | null; sentAt: number | null; preview: { kind: 'recap' | 'new'; text: string } | null }[] = await Promise.all(
     followupRows.map(async (f) => ({
       username: f.username as string, day: f.day as string, status: f.status as 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired',
       kind: f.kind as 'recap' | 'new' | null, text: f.text as string | null, reason: f.reason as string | null, error: f.error as string | null, sentAt: toMs(f.sent_at),
       preview: f.status === 'sent' || f.status === 'sending' ? null : await followupPreview(f.username, f.day).catch(() => null),
     })),
   );
+
+  // Pemenang yang DM-nya sudah terkirim tapi belum punya catatan chat lanjutan (mis. DM terkirim sebelum fitur dinyalakan)
+  // tetap ditampilkan, supaya statusnya jelas dan chat lanjutannya bisa dikirim manual.
+  {
+    const have = new Set(followups.map((f) => `${f.username}|${f.day}`));
+    const oldest = dayKey(Date.now() - 3 * DAY_MS);
+    for (const r of results) {
+      if (r.status !== 'winner' || r.dm_status !== 'sent' || r.dm_username !== r.username || !r.close_at) continue;
+      const day = dayKey(toMs(r.close_at)!);
+      const key = `${r.username}|${day}`;
+      if (day < oldest || have.has(key)) continue;
+      have.add(key);
+      const early = autoFollowup.on && autoFollowup.since != null && toMs(r.dm_at)! < autoFollowup.since;
+      const reason = !r.dm_recipient
+        ? 'ID penerima DM tidak tersimpan, jadi balasannya tidak bisa dicek'
+        : !autoFollowup.on ? 'Auto-chat lanjutan mati'
+        : early ? 'DM terkirim sebelum auto-chat dinyalakan, tidak diproses otomatis' : 'Belum dicek';
+      followups.push({ username: r.username as string, day, status: 'waiting', kind: null, text: null, reason, error: null, sentAt: null, preview: await followupPreview(r.username, day).catch(() => null) });
+    }
+  }
 
   const verified = new Set(bidders.map((b) => b.username as string));
   const imported = new Set(bidders.filter((b) => b.source === 'import').map((b) => b.username as string));
