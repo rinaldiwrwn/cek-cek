@@ -48,7 +48,13 @@ async function request(url: string, init?: RequestInit): Promise<any> {
   const full = url.includes('access_token=') ? url : `${url}${sep}access_token=${encodeURIComponent(await token())}`;
   const r = await fetch(full, { ...init, cache: 'no-store' });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.error) throw new Error(`Instagram: ${j.error?.message || `HTTP ${r.status}`}`);
+  if (!r.ok || j.error) {
+    const err = new Error(`Instagram: ${j.error?.message || `HTTP ${r.status}`}`) as Error & { ambiguous?: boolean };
+    // Error umum ("An unknown error has occurred", kode 1/2, atau bertanda sementara) kadang dikirim Instagram
+    // padahal pesannya sudah terkirim, jadi hasilnya belum pasti.
+    err.ambiguous = j.error?.code === 1 || j.error?.code === 2 || j.error?.is_transient === true || r.status >= 500;
+    throw err;
+  }
   return j;
 }
 
