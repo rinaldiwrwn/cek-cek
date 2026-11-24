@@ -217,6 +217,11 @@ export function Dashboard() {
         </div>
       </header>
 
+      {state.testAccounts.length > 0 && (
+        <p className="note">
+          Akun uji aktif: {state.testAccounts.map((u) => `@${u}`).join(', ')}. Komentar "Tes, 300" dari akun ini menjadi bid bohongan, dan hasil lelang untuk akun ini tidak dihitung di rekap pemenang.
+        </p>
+      )}
       {state.mock && <p className="note">Mode demo: semua data di bawah ini palsu dan tidak ada komentar yang dikirim ke Instagram.</p>}
       {!state.setup.token && <p className="note warn">Token Instagram belum diisi (<code>IG_ACCESS_TOKEN</code>). Lihat langkah di README.</p>}
       {!state.setup.cron && !state.mock && <p className="note warn">Pemicu per menit belum diatur (<code>CRON_SECRET</code>). Komentar otomatis hanya jalan selama dashboard ini terbuka.</p>}

@@ -2,7 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { amountText, cleanUsername, parseBid, parseCaption, splitUsernames } from './parse';
-import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, isTestAccount, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
+import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, isTestAccount, SNIPER_MS, testAccounts, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
 const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
@@ -770,6 +770,7 @@ export async function getState() {
     autoDm,
     dmDelaySec: AUTO_DM_DELAY / 1000,
     dmTemplate: dmTemplate(),
+    testAccounts: [...testAccounts()],
     verifiedCount: Number(total[0]?.n ?? 0),
     results: results.map((r) => ({
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,

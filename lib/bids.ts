@@ -61,7 +61,8 @@ const byTime = (a: CommentIn, b: CommentIn) =>
 /** Akun uji (variabel TEST_ACCOUNTS, dipisah koma), mis. akun kedua milikmu. Hanya akun ini yang boleh membuat bid uji. */
 export function testAccounts(): Set<string> {
   return new Set(
-    String(process.env.TEST_ACCOUNTS || '')
+    // TEST_ACCOUNT (tanpa S) juga diterima, karena salah ketik nama variabel mudah terjadi dan gagalnya diam-diam.
+    String(process.env.TEST_ACCOUNTS || process.env.TEST_ACCOUNT || '')
       .split(/[\s,]+/)
       .map((s) => s.replace(/^@/, '').trim().toLowerCase())
       .filter(Boolean),
