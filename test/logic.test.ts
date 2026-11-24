@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { amountText, extractUsernames, parseBid, parseCaption, splitUsernames } from '../lib/parse';
-import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, winnerBidForDm, type CommentIn } from '../lib/bids';
+import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, parseTestBid, winnerBidForDm, type CommentIn } from '../lib/bids';
 
 const CAPTION = `⌚️ LELANG DIMULAI ⌚️
 Mohon 𝗕𝗔𝗖𝗔 𝗗𝗘𝗦𝗞𝗥𝗜𝗣𝗦𝗜
@@ -251,6 +251,51 @@ test('DM pemenang hanya untuk bid yang disahkan dan tidak melanggar aturan', () 
   assert.equal(win(rantai.map((x) => (x.id === '2' ? { ...x, override: 'valid' as const } : x)), 'b', 200), '3');
   // nominal tidak sama dengan hasil lelang: tidak ada bid yang cocok
   assert.equal(win([c(1, 'a', '100', 3600), c(2, 'b', '150', 3500)], 'b', 200), null);
+});
+
+test('bid uji dari akun uji: bohongan, bebas aturan, tidak memengaruhi bid asli', () => {
+  assert.equal(parseTestBid('Tes, 300'), 300);
+  assert.equal(parseTestBid('tes 1500'), 1500);
+  assert.equal(parseTestBid('test: 250k'), 250);
+  assert.equal(parseTestBid('tes'), null);
+  assert.equal(parseTestBid('+50'), null);
+  assert.equal(parseTestBid('testimoni 300'), null);
+
+  process.env.TEST_ACCOUNTS = 'sakatimepiece';
+  try {
+    const v = { ...rules, verified: new Set(['a']) };
+    const { rows, top } = evaluate(
+      [
+        c(1, 'a', '100', 3600),
+        c(2, 'sakatimepiece', 'Tes, 300', -50), // setelah close dan melompat 200: bid uji bebas aturan
+        c(3, 'orang_lain', 'Tes, 300', -40), // akun biasa: bid biasa yang melanggar aturan
+        c(4, 'sakatimepiece', 'OB', 3000), // bukan format uji: bid biasa
+        c(5, 'sakatimepiece', 'tes 120', 2900, { deleted: true }), // terhapus: tidak sah
+        c(6, 'sakatimepiece', 'tes 120', 2800, { override: 'invalid' }), // ditolak manual: tidak sah
+        c(7, 'a', '+50', 2700), // +50 dihitung dari bid asli (100), bukan dari bid uji 300
+      ],
+      v,
+    );
+    const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+    assert.equal(by[2].isTest, true);
+    assert.equal(by[2].valid, true);
+    assert.deepEqual(by[2].flags, []);
+    assert.equal(by[2].amount, 300);
+    assert.equal(by[3].isTest, false);
+    assert.equal(by[3].valid, false); // terlambat, bukan bid uji
+    assert.equal(by[4].isTest, false);
+    assert.equal(by[5].valid, false);
+    assert.equal(by[6].valid, false);
+    assert.equal(by[7].amount, 150);
+    assert.equal(top?.id, '7'); // bid uji tidak pernah menjadi bid tertinggi
+    // bisa dipilih sebagai pemenang uji dan memenuhi syarat DM
+    assert.equal(winnerBidForDm(rows, { username: 'sakatimepiece', amount: 300 })?.id, '2');
+    // di luar akun uji, format yang sama tidak punya keistimewaan
+    delete process.env.TEST_ACCOUNTS;
+    assert.equal(evaluate([c(1, 'a', '100', 3600), c(2, 'sakatimepiece', 'Tes, 300', -50)], v).rows[1].isTest, false);
+  } finally {
+    delete process.env.TEST_ACCOUNTS;
+  }
 });
 
 test('pemenang bawaan', () => {
