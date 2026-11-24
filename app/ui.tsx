@@ -323,6 +323,10 @@ export function Dashboard() {
       {state.posts.filter((p) => p.id === open).map((p) => (
         <section key={p.id} className="post detailbox">
           <h2 className="detailtitle">{p.title}</h2>
+          <p className="muted small syncline">
+            Komentar terakhir dibaca {p.lastSync ? time(p.lastSync) : 'belum pernah'}.{' '}
+            <button className="mini" onClick={() => act({ type: 'sync', id: p.id })}>↻ Muat ulang komentar</button>
+          </p>
           <Detail p={p} result={state.results.find((r) => r.postId === p.id)} act={act} />
         </section>
       ))}

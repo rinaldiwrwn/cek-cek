@@ -168,3 +168,4 @@ button.attn { border-color: var(--warn); background: var(--warn-bg); color: var(
 @media (prefers-reduced-motion: reduce) { .bids li.flash { animation: none; background: var(--warn-bg); } }
 .warnline { color: var(--warn); font-weight: 600; }
 .dmbtn { align-self: flex-start; margin-top: 6px; }
+.syncline { margin: 4px 12px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
