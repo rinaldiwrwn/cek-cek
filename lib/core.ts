@@ -881,6 +881,12 @@ export async function autoFollowups() {
   }
 }
 
+/** Diagnosis: apa yang dilihat Instagram untuk pemenang ini (langganan webhook dan isi percakapan). Tidak mengirim apa pun. */
+export async function diagnoseFollowup(username: string, day: string) {
+  const ctx = await followupContext(username, day);
+  return ig.diagnoseChat(ctx.recipient, username);
+}
+
 /** Isi chat lanjutan yang akan dikirim untuk sebuah grup, kalau pelanggannya sudah membalas (untuk ditampilkan di dashboard). */
 async function followupPreview(username: string, day: string) {
   const ctx = await followupContext(username, day);

@@ -289,3 +289,47 @@ export async function postComment(mediaId: string, message: string): Promise<str
   });
   return String(j.id);
 }
+
+/**
+ * Diagnosis chat lanjutan: apa yang dilihat Instagram untuk seorang pelanggan. Tidak mengubah apa pun.
+ * Tiap pemeriksaan berdiri sendiri, jadi satu yang gagal tidak menghentikan yang lain.
+ */
+export async function diagnoseChat(recipientId: string | null, username: string): Promise<string[]> {
+  if (isMock()) return ['mode demo: tidak ada yang diperiksa'];
+  const out: string[] = [];
+  const a = await account();
+  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  out.push(`Akun: @${a.username} (ID ${a.id}${id !== a.id ? `, ID pesan ${id}` : ''})`);
+  out.push(`ID penerima tersimpan: ${recipientId || 'tidak ada'}`);
+  const step = async (label: string, fn: () => Promise<string>) => {
+    try {
+      out.push(`${label}: ${await fn()}`);
+    } catch (e) {
+      out.push(`${label}: GAGAL ${String((e as Error)?.message || e).slice(0, 260)}`);
+    }
+  };
+  await step('Langganan webhook', async () => {
+    const j = await request(`${a.base}${ver()}/${id}/subscribed_apps`);
+    const rows = (j.data || []) as any[];
+    if (!rows.length) return 'tidak ada aplikasi yang berlangganan';
+    return rows.map((r) => `${r.name || r.id}: ${(r.subscribed_fields || []).join(',') || '(tanpa kolom)'}`).join(' | ');
+  });
+  const fields = 'participants,updated_time,messages.limit(8){id,created_time,from,message}';
+  const sum = (convs: any[]) =>
+    convs.length
+      ? convs
+          .map((c) => {
+            const ms = (c.messages?.data || []) as any[];
+            const who = (c.participants?.data || []).map((p: any) => p.username || p.id).join('+');
+            const froms = ms.map((m) => `${m.from?.username || m.from?.id}@${String(m.created_time).slice(11, 19)}`).join(' ');
+            return `[${who}] ${ms.length} pesan: ${froms}`;
+          })
+          .join(' || ')
+      : 'kosong';
+  if (recipientId) {
+    await step('Percakapan via user_id', async () => sum(((await request(`${a.base}${ver()}/${id}/conversations?platform=instagram&user_id=${encodeURIComponent(recipientId)}&fields=${fields}`)).data || []) as any[]));
+  }
+  await step('Percakapan terbaru', async () => sum(((await request(`${a.base}${ver()}/${id}/conversations?platform=instagram&limit=3&fields=${fields}`)).data || []) as any[]));
+  out.push(`(cari @${username} di daftar di atas)`);
+  return out;
+}
