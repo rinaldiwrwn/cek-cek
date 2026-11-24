@@ -783,7 +783,7 @@ async function followupContext(username: string, day: string) {
   ]);
   const sent = wins.filter((w) => w.dm_status === 'sent' && w.dm_username === username);
   const recipient = [...sent].sort((a, b) => toMs(b.dm_at)! - toMs(a.dm_at)!).find((w) => w.dm_recipient)?.dm_recipient as string | undefined;
-  const winList: Win[] = wins.map((w) => ({ postId: w.post_id, amount: w.amount, closeAt: toMs(w.close_at)!, dmSent: w.dm_status === 'sent' && w.dm_username === username }));
+  const winList: Win[] = wins.map((w) => ({ postId: w.post_id, amount: w.amount, closeAt: toMs(w.close_at)!, dmSent: (w.dm_status === 'sent' || w.dm_status === 'unsure') && w.dm_username === username }));
   return {
     wins: winList,
     undecided: Number(undecided[0]?.n ?? 0),
@@ -950,13 +950,17 @@ export async function getState() {
     const have = new Set(followups.map((f) => `${f.username}|${f.day}`));
     const oldest = dayKey(Date.now() - 3 * DAY_MS);
     for (const r of results) {
-      if (r.status !== 'winner' || r.dm_status !== 'sent' || r.dm_username !== r.username || !r.close_at) continue;
+      if (r.status !== 'winner' || !['sent', 'unsure', 'failed'].includes(r.dm_status) || r.dm_username !== r.username || !r.close_at) continue;
       const day = dayKey(toMs(r.close_at)!);
       const key = `${r.username}|${day}`;
       if (day < oldest || have.has(key)) continue;
       have.add(key);
       const early = autoFollowup.on && autoFollowup.since != null && toMs(r.dm_at)! < autoFollowup.since;
-      const reason = !r.dm_recipient
+      const reason = r.dm_status === 'unsure'
+        ? 'DM kemenangan belum pasti terkirim (cek kotak pesan penerima). Chat lanjutan bisa disalin dan dikirim manual'
+        : r.dm_status === 'failed'
+        ? 'DM kemenangan gagal terkirim. Chat lanjutan bisa disalin dan dikirim manual'
+        : !r.dm_recipient
         ? 'ID penerima DM tidak tersimpan, jadi balasannya tidak bisa dicek'
         : !autoFollowup.on ? 'Auto-chat lanjutan mati'
         : early ? 'DM terkirim sebelum auto-chat dinyalakan, tidak diproses otomatis' : 'Belum dicek';
