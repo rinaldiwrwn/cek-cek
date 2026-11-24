@@ -891,7 +891,9 @@ export async function diagnoseFollowup(username: string, day: string) {
 async function followupPreview(username: string, day: string) {
   const ctx = await followupContext(username, day);
   const d = decideFollowup({ now: Date.now(), wins: ctx.wins, customer: ctx.customer, lastReplyAt: Date.now(), firstDmAt: 0, undecided: ctx.undecided, transfer: transferInfo(), newText: newCustomerText(), force: true });
-  return d.action === 'send' ? { kind: d.kind, text: d.text } : null;
+  // complete: semua lelang hari itu sudah selesai dan semua kemenangannya sudah di-DM, jadi totalnya sudah final.
+  const complete = ctx.undecided === 0 && ctx.wins.every((w) => w.dmSent);
+  return d.action === 'send' ? { kind: d.kind, text: d.text, complete: d.kind === 'new' || complete } : null;
 }
 
 /** Menetapkan hasil lelang: pemenang (akun + nominal), "No Winner", atau null untuk membatalkan penetapan. */
@@ -934,7 +936,7 @@ export async function getState() {
     q('SELECT username, ongkir, greeting FROM customers ORDER BY username'),
     q(`SELECT * FROM followups WHERE day >= $1 ORDER BY day DESC, username`, [dayKey(Date.now() - 3 * DAY_MS)]),
   ]);
-  const followups: { username: string; day: string; status: 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired'; kind: 'recap' | 'new' | null; text: string | null; reason: string | null; error: string | null; sentAt: number | null; preview: { kind: 'recap' | 'new'; text: string } | null }[] = await Promise.all(
+  const followups: { username: string; day: string; status: 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired'; kind: 'recap' | 'new' | null; text: string | null; reason: string | null; error: string | null; sentAt: number | null; preview: { kind: 'recap' | 'new'; text: string; complete: boolean } | null }[] = await Promise.all(
     followupRows.map(async (f) => ({
       username: f.username as string, day: f.day as string, status: f.status as 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired',
       kind: f.kind as 'recap' | 'new' | null, text: f.text as string | null, reason: f.reason as string | null, error: f.error as string | null, sentAt: toMs(f.sent_at),

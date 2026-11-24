@@ -175,3 +175,4 @@ button.attn { border-color: var(--warn); background: var(--warn-bg); color: var(
 @media (max-width: 480px) { .seqrow { grid-template-columns: 1fr 1fr; } .seqrow button { grid-column: 1 / -1; } }
 .customers .vlist li { flex-wrap: wrap; }
 .pre { display: block; white-space: pre-wrap; font-weight: 400; color: var(--ink); margin-top: 4px; }
+.linkbtn { border: 1px solid var(--line); background: var(--card); color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; }
