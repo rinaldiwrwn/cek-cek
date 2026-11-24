@@ -191,11 +191,14 @@ export async function sendPrivateReply(commentId: string, text: string): Promise
   return { messageId: String(j.message_id ?? j.id ?? ''), recipientId: String(j.recipient_id ?? '') };
 }
 
+/** ID yang dipakai untuk pesan biasa dan membaca percakapan: IG_PAGE_ID (ID Halaman) kalau diisi, kalau tidak ID untuk DM, lalu ID akun. */
+const chatId = (fallback: string) => process.env.IG_PAGE_ID?.trim() || process.env.IG_MESSAGES_ID?.trim() || fallback;
+
 /** Pesan biasa ke seorang pelanggan (ID Instagram-nya dari respons Private Reply). Hanya boleh dalam 24 jam sejak dia terakhir membalas. */
 export async function sendMessage(recipientId: string, text: string): Promise<string> {
   if (isMock()) return mock.sendMessage(recipientId, text);
   const a = await account();
-  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  const id = chatId(a.id);
   const j = await request(`${a.base}${ver()}/${id}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -212,7 +215,7 @@ export async function sendMessage(recipientId: string, text: string): Promise<st
 export async function lastCustomerMessageAt(recipientId: string, username?: string): Promise<{ at: number | null; debug: string }> {
   if (isMock()) return { at: mock.lastCustomerMessageAt(recipientId), debug: 'mock' };
   const a = await account();
-  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  const id = chatId(a.id);
   const fields = 'participants,messages.limit(15){id,created_time,from}';
   const base = `${a.base}${ver()}/${id}/conversations?platform=instagram`;
   const own = new Set([String(a.id), String(id)]);
@@ -298,7 +301,7 @@ export async function diagnoseChat(recipientId: string | null, username: string)
   if (isMock()) return ['mode demo: tidak ada yang diperiksa'];
   const out: string[] = [];
   const a = await account();
-  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  const id = chatId(a.id);
   out.push(`Akun: @${a.username} (ID ${a.id}${id !== a.id ? `, ID pesan ${id}` : ''})`);
   out.push(`ID penerima tersimpan: ${recipientId || 'tidak ada'}`);
   const step = async (label: string, fn: () => Promise<string>) => {
@@ -314,6 +317,21 @@ export async function diagnoseChat(recipientId: string | null, username: string)
     if (!rows.length) return 'tidak ada aplikasi yang berlangganan';
     return rows.map((r) => `${r.name || r.id}: ${(r.subscribed_fields || []).join(',') || '(tanpa kolom)'}`).join(' | ');
   });
+  let pageId = '';
+  await step('Halaman Facebook yang terhubung', async () => {
+    const j = await request(`${a.base}${ver()}/me/accounts?fields=id,name,instagram_business_account&limit=25`);
+    const rows = (j.data || []) as any[];
+    if (!rows.length) return 'tidak ada (token tidak punya akses ke Halaman)';
+    pageId = rows.find((r) => r.instagram_business_account?.id === a.id)?.id || '';
+    return rows.map((r) => `${r.name} (ID ${r.id})${r.instagram_business_account?.id ? ` ← IG ${r.instagram_business_account.id}${r.instagram_business_account.id === a.id ? ' = akun ini' : ''}` : ''}`).join(' | ');
+  });
+  if (pageId && pageId !== id) {
+    await step(`Langganan webhook Halaman ${pageId}`, async () => {
+      const j = await request(`${a.base}${ver()}/${pageId}/subscribed_apps`);
+      const rows = (j.data || []) as any[];
+      return rows.length ? rows.map((r) => `${r.name || r.id}: ${(r.subscribed_fields || []).join(',') || '(tanpa kolom)'}`).join(' | ') : 'tidak ada aplikasi yang berlangganan';
+    });
+  }
   const fields = 'participants,updated_time,messages.limit(8){id,created_time,from,message}';
   const sum = (convs: any[]) =>
     convs.length
@@ -330,6 +348,12 @@ export async function diagnoseChat(recipientId: string | null, username: string)
     await step('Percakapan via user_id', async () => sum(((await request(`${a.base}${ver()}/${id}/conversations?platform=instagram&user_id=${encodeURIComponent(recipientId)}&fields=${fields}`)).data || []) as any[]));
   }
   await step('Percakapan terbaru', async () => sum(((await request(`${a.base}${ver()}/${id}/conversations?platform=instagram&limit=3&fields=${fields}`)).data || []) as any[]));
+  if (pageId && pageId !== id) {
+    if (recipientId) {
+      await step(`Percakapan via Halaman, user_id`, async () => sum(((await request(`${a.base}${ver()}/${pageId}/conversations?platform=instagram&user_id=${encodeURIComponent(recipientId)}&fields=${fields}`)).data || []) as any[]));
+    }
+    await step(`Percakapan terbaru via Halaman`, async () => sum(((await request(`${a.base}${ver()}/${pageId}/conversations?platform=instagram&limit=3&fields=${fields}`)).data || []) as any[]));
+  }
   out.push(`(cari @${username} di daftar di atas)`);
   return out;
 }
