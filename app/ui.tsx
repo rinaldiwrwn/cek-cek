@@ -700,6 +700,7 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
   const save = async (username: string, ong: string, g: string) => {
     await act({ type: 'customer', username, ongkir: parseNum(ong), greeting: g });
   };
+  const existing = customers.find((c) => c.username === user.trim().replace(/^@/, '').toLowerCase());
   return (
     <section className="note verified customers">
       <h2 className="detailtitle">Pelanggan lama</h2>
@@ -712,6 +713,8 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
         onSubmit={async (e) => {
           e.preventDefault();
           if (!user.trim() || ongkir === '') return;
+          // Akun yang sudah ada tidak dobel, tapi datanya ditimpa. Konfirmasi dulu supaya ongkir lama tidak hilang tanpa sadar.
+          if (existing && !confirm(`@${existing.username} sudah ada di daftar (ongkir ${fmtNum(existing.ongkir)}rb, sapaan ${greetingWord(existing.greeting)}).\n\nTimpa dengan ongkir ${fmtNum(parseNum(ongkir))}rb, sapaan ${greetingWord(greeting)}?`)) return;
           await save(user, ongkir, greeting);
           setUser('');
           setOngkir('');
@@ -723,8 +726,13 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
           <option value="om">om</option>
           <option value="ka">kaa</option>
         </select>
-        <button className="primary" type="submit">Simpan</button>
+        <button className="primary" type="submit">{existing ? 'Perbarui' : 'Simpan'}</button>
       </form>
+      {existing && (
+        <p className="small warnline">
+          @{existing.username} sudah ada di daftar (ongkir {fmtNum(existing.ongkir)}rb, sapaan {greetingWord(existing.greeting)}). Menyimpan akan memperbarui datanya, bukan menambah baris baru.
+        </p>
+      )}
       {customers.length > 8 && <input placeholder="Cari akun…" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Cari pelanggan" />}
       <ul className="vlist">
         {shown.map((c) => (

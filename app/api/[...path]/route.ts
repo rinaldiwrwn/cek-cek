@@ -88,8 +88,8 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     if (!customerAuthed(req)) return json({ error: 'Tidak diizinkan' }, 401);
     const b = await req.json().catch(() => ({}));
     try {
-      await setCustomer(String(b.username ?? ''), Number(b.ongkir), String(b.greeting ?? 'om'));
-      return json({ ok: true });
+      const previous = await setCustomer(String(b.username ?? ''), Number(b.ongkir), String(b.greeting ?? 'om'));
+      return json({ ok: true, updated: !!previous, previous });
     } catch (e) {
       return json({ error: String((e as Error).message) }, 400);
     }
