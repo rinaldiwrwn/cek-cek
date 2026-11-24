@@ -24,8 +24,14 @@ export const fmtRbK = (n: number) => fmtNum(n) + (n >= 1000 ? 'k' : 'rb');
 
 export const packingFee = () => Math.max(0, Number(process.env.PACKING_FEE ?? 5) || 0); // rb per barang
 
-export type Greeting = 'om' | 'ka';
-export const greetingWord = (g: string | null | undefined) => (g === 'ka' ? 'kaa' : 'om');
+export type Greeting = 'om' | 'ka' | 'mann';
+export const GREETINGS: Greeting[] = ['om', 'ka', 'mann'];
+/** Sapaan yang dikenal; apa pun di luar daftar menjadi "om". */
+export const normalizeGreeting = (g: unknown): Greeting => (GREETINGS.includes(g as Greeting) ? (g as Greeting) : 'om');
+/** Kata yang ditulis di pesan: "ka" ditulis "kaa". */
+export const greetingWord = (g: string | null | undefined) => ({ om: 'om', ka: 'kaa', mann: 'mann' })[normalizeGreeting(g)];
+/** Sapaan berikutnya untuk tombol yang menggilir: om, ka, mann, lalu kembali ke om. */
+export const nextGreeting = (g: string | null | undefined): Greeting => GREETINGS[(GREETINGS.indexOf(normalizeGreeting(g)) + 1) % GREETINGS.length];
 
 export const NEW_CUSTOMER_TEXT = 'Saya minta alamat lengkap dan kontak penerimanya yaa, untuk dicek ongkirnya dulu';
 

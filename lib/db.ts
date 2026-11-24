@@ -37,7 +37,7 @@ const SCHEMA = [
   `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_auto boolean NOT NULL DEFAULT false`,
   // ID Instagram penerima DM pemenang (dari respons Private Reply), dipakai untuk chat lanjutan setelah dia membalas.
   `ALTER TABLE results ADD COLUMN IF NOT EXISTS dm_recipient text`,
-  // Pelanggan lama: ongkirnya (ribuan) dan sapaannya ('om' | 'ka').
+  // Pelanggan lama: ongkirnya (ribuan) dan sapaannya ('om' | 'ka' | 'mann').
   `CREATE TABLE IF NOT EXISTS customers (username text PRIMARY KEY, ongkir integer NOT NULL, greeting text NOT NULL DEFAULT 'om', updated_at timestamptz NOT NULL)`,
   // Chat lanjutan per pemenang per hari (WIB). status: waiting | sending | sent | failed | unsure | expired.
   `ALTER TABLE customers ALTER COLUMN ongkir TYPE double precision`,

@@ -368,6 +368,12 @@ test('chat lanjutan: rekap pelanggan lama dan permintaan alamat pelanggan baru',
   // Total sejuta ke atas memakai penulisan k.
   assert.match(recapMessage({ amounts: [1500], ongkir: 20, packing: 5 }).text, /=1\.525k yaa om/);
 
+  // Sapaan: om, ka (ditulis kaa), mann; yang tidak dikenal menjadi om.
+  assert.equal(recapMessage({ amounts: [300], ongkir: 10, greeting: 'mann', packing: 5, transfer: '123' }).text, 'Untuk totalnya jadi 300+5+10=315rb yaa mann\n\nTransfernya kesini ya mann:\n123');
+  assert.equal(recapMessage({ amounts: [300], ongkir: 10, greeting: 'bro', packing: 5 }).text, 'Untuk totalnya jadi 300+5+10=315rb yaa om');
+  const { nextGreeting } = await import('../lib/followup');
+  assert.deepEqual(['om', 'ka', 'mann', 'mann'].map(nextGreeting), ['ka', 'mann', 'om', 'om']);
+
   // Ongkir desimal ditulis dengan koma, sama seperti webapp ongkir.
   assert.equal(recapMessage({ amounts: [350], ongkir: 18.5, greeting: 'om', packing: 5 }).text, 'Untuk totalnya jadi 350+5+18,5=373,5rb yaa om');
 

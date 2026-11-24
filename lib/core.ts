@@ -2,7 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { amountText, cleanUsername, parseBid, parseCaption, splitUsernames } from './parse';
-import { dayKey, dayStart, DAY_MS, decideFollowup, recapMessage, REPLY_WINDOW_MS, NEW_CUSTOMER_TEXT, type Win } from './followup';
+import { dayKey, dayStart, DAY_MS, decideFollowup, normalizeGreeting, recapMessage, REPLY_WINDOW_MS, NEW_CUSTOMER_TEXT, type Win } from './followup';
 import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, isTestAccount, SNIPER_MS, testAccounts, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
@@ -765,7 +765,7 @@ export async function setCustomer(rawUser: string, ongkir: number, greeting: str
   await q(
     `INSERT INTO customers (username, ongkir, greeting, updated_at) VALUES ($1,$2,$3,$4)
      ON CONFLICT (username) DO UPDATE SET ongkir = $2, greeting = $3, updated_at = $4`,
-    [username, Math.round(ongkir * 100) / 100, greeting === 'ka' ? 'ka' : 'om', iso(Date.now())],
+    [username, Math.round(ongkir * 100) / 100, normalizeGreeting(greeting), iso(Date.now())],
   );
   // Data lama (kalau akunnya sudah ada) dikembalikan supaya penyimpanan yang menimpa bisa diberitahukan ke pemanggil.
   return { previous, written: true };
@@ -993,7 +993,7 @@ export async function getState() {
     autoReply,
     autoDm,
     autoFollowup,
-    customers: customers.map((c) => ({ username: c.username as string, ongkir: c.ongkir as number, greeting: c.greeting as 'om' | 'ka' })),
+    customers: customers.map((c) => ({ username: c.username as string, ongkir: c.ongkir as number, greeting: normalizeGreeting(c.greeting) })),
     followups,
     transferSet: !!transferInfo(),
     dmDelaySec: AUTO_DM_DELAY / 1000,
