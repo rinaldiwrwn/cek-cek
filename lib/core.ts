@@ -816,15 +816,24 @@ export async function processFollowup(username: string, day: string, manual = fa
     if (manual) throw new Error(msg);
   };
   if (!ctx.recipient) return fail('ID penerima DM belum tersimpan (DM dikirim sebelum fitur ini ada, atau Instagram tidak mengembalikannya)');
-  let lastReplyAt: number | null;
+  let lastReplyAt: number | null = null;
+  let debug = '';
   try {
-    lastReplyAt = await ig.lastCustomerMessageAt(ctx.recipient);
+    const r = await ig.lastCustomerMessageAt(ctx.recipient, username);
+    lastReplyAt = r.at;
+    debug = r.debug;
   } catch (e) {
-    await noteError(`Membaca balasan @${username} gagal: ${String((e as Error)?.message || e)}`);
-    return fail(`Gagal membaca balasan: ${String((e as Error)?.message || e)}`);
+    debug = `gagal membaca: ${String((e as Error)?.message || e)}`;
+    if (!manual) {
+      await noteError(`Membaca balasan @${username} gagal: ${String((e as Error)?.message || e)}`);
+      return fail(`Gagal membaca balasan: ${String((e as Error)?.message || e)}`);
+    }
   }
+  // Kirim manual: kamu sudah memutuskan, jadi yang menentukan boleh atau tidaknya adalah Instagram sendiri
+  // (pesan di luar jendela 24 jam ditolak dengan error yang ditampilkan), bukan pembacaan balasan di atas.
+  if (manual) lastReplyAt = now;
   const d = decideFollowup({ now, wins: ctx.wins, customer: ctx.customer, lastReplyAt, firstDmAt: ctx.firstDmAt, undecided: ctx.undecided, transfer: transferInfo(), newText: newCustomerText(), force: manual });
-  if (d.action === 'wait') return fail(d.reason);
+  if (d.action === 'wait') return fail(debug ? `${d.reason} (${debug})` : d.reason);
   if (d.action === 'expired') {
     await q(`UPDATE followups SET status = 'expired', checked_at = $3, reason = $4 WHERE username = $1 AND day = $2`, [username, day, iso(now), d.reason]);
     if (manual) throw new Error(d.reason);
