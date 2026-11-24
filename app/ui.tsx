@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
 import { amountText, extractUsernames } from '@/lib/parse';
-import { cleanGreeting, dayKey, fmtNum, GREETING_MAX, greetingWord } from '@/lib/followup';
+import { dayKey, fmtNum, formatGreeting, GREETING_MAX, greetingKind, greetingWord } from '@/lib/followup';
 
 /** Angka dari isian: koma atau titik sebagai desimal (18,5 atau 18.5). */
 const parseNum = (s: string) => Number(String(s).trim().replace(',', '.'));
@@ -664,9 +664,9 @@ function FollowupLine({ f, isCustomer, advanced, act }: { f: Followup; isCustome
         <button className="mini" onClick={async () => {
           const ong = prompt(`Ongkir @${f.username} (ribuan, mis. 18). Disimpan sebagai pelanggan lama:`);
           if (ong == null || ong.trim() === '' || !Number.isFinite(parseNum(ong))) return;
-          const g = prompt('Sapaan untuk pesan (bebas diketik, mis. om, ka, Mann). Kosong = om:', 'om');
+          const g = prompt('Sapaan: ketik om, ka (kaa), atau sapaan custom (mis. Mann). Kosong = om:', 'om');
           if (g == null) return;
-          await act({ type: 'customer', username: f.username, ongkir: parseNum(ong), greeting: cleanGreeting(g) });
+          await act({ type: 'customer', username: f.username, ongkir: parseNum(ong), greeting: formatGreeting(g) });
         }}>Jadikan pelanggan lama</button>
       )}
       {advanced && (
@@ -694,7 +694,9 @@ async function copyText(text: string) {
 function CustomersPanel({ customers, packingNote, act }: { customers: State['customers']; packingNote: boolean; act: (b: unknown) => Promise<void> }) {
   const [user, setUser] = useState('');
   const [ongkir, setOngkir] = useState('');
-  const [greeting, setGreeting] = useState('');
+  const [kind, setKind] = useState<'om' | 'ka' | 'custom'>('om');
+  const [custom, setCustom] = useState('');
+  const greeting = kind === 'custom' ? custom : kind; // yang dikirim: om, ka, atau teks custom
   const [find, setFind] = useState('');
   const shown = customers.filter((c) => c.username.includes(find.trim().replace(/^@/, '').toLowerCase()));
   const save = async (username: string, ong: string, g: string) => {
@@ -713,21 +715,26 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
         onSubmit={async (e) => {
           e.preventDefault();
           if (!user.trim() || ongkir === '') return;
+          if (kind === 'custom' && !custom.trim()) return alert('Isi sapaan custom-nya, atau pilih om atau kaa.');
           // Akun yang sudah ada tidak dobel, tapi datanya ditimpa. Konfirmasi dulu supaya ongkir lama tidak hilang tanpa sadar.
           if (existing && !confirm(`@${existing.username} sudah ada di daftar (ongkir ${fmtNum(existing.ongkir)}rb, sapaan ${greetingWord(existing.greeting)}).\n\nTimpa dengan ongkir ${fmtNum(parseNum(ongkir))}rb, sapaan ${greetingWord(greeting)}?`)) return;
           await save(user, ongkir, greeting);
           setUser('');
           setOngkir('');
-          setGreeting(''); // dikosongkan juga, supaya sapaan khusus tidak terbawa ke akun berikutnya
+          setKind('om'); // dikembalikan ke om dan custom dikosongkan, supaya sapaan khusus tidak terbawa ke akun berikutnya
+          setCustom('');
         }}
       >
         <input placeholder="@username" value={user} onChange={(e) => setUser(e.target.value)} aria-label="Username" />
         <input placeholder="Ongkir (rb)" inputMode="decimal" value={ongkir} onChange={(e) => setOngkir(e.target.value.replace(/[^0-9.,]/g, ''))} aria-label="Ongkir dalam ribuan" />
-        <input placeholder="Sapaan (om)" value={greeting} maxLength={GREETING_MAX} list="sapaan-saran" onChange={(e) => setGreeting(e.target.value)} aria-label="Sapaan" />
-        <datalist id="sapaan-saran">
-          <option value="om" />
-          <option value="ka" />
-        </datalist>
+        <select value={kind} onChange={(e) => setKind(e.target.value as 'om' | 'ka' | 'custom')} aria-label="Sapaan">
+          <option value="om">om</option>
+          <option value="ka">kaa</option>
+          <option value="custom">custom…</option>
+        </select>
+        {kind === 'custom' && (
+          <input className="customfield" placeholder="Sapaan custom (mis. Mann)" value={custom} maxLength={GREETING_MAX} autoFocus onChange={(e) => setCustom(e.target.value)} aria-label="Sapaan custom" />
+        )}
         <button className="primary" type="submit">{existing ? 'Perbarui' : 'Simpan'}</button>
       </form>
       {existing && (
@@ -744,7 +751,21 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
             </span>
             <span>
               <button className="mini" onClick={() => { const v = prompt(`Ongkir baru untuk @${c.username} (ribuan):`, fmtNum(c.ongkir)); if (v != null && v.trim() !== '' && Number.isFinite(parseNum(v))) save(c.username, v.trim(), c.greeting); }}>Ubah ongkir</button>
-              <button className="mini" onClick={() => { const g = prompt(`Sapaan untuk @${c.username} (bebas diketik, mis. om, ka, Mann):`, greetingWord(c.greeting) === 'kaa' ? 'ka' : greetingWord(c.greeting)); if (g != null) save(c.username, String(c.ongkir), g); }}>Sapaan: {greetingWord(c.greeting)}</button>
+              <select
+                className="mini sapaansel"
+                aria-label={`Sapaan untuk @${c.username}`}
+                value={greetingKind(c.greeting)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v !== 'custom') return void save(c.username, String(c.ongkir), v);
+                  const g = prompt(`Sapaan custom untuk @${c.username} (mis. Mann):`, greetingKind(c.greeting) === 'custom' ? c.greeting : '');
+                  if (g != null && g.trim()) save(c.username, String(c.ongkir), g);
+                }}
+              >
+                <option value="om">om</option>
+                <option value="ka">kaa</option>
+                <option value="custom">{greetingKind(c.greeting) === 'custom' ? `${greetingWord(c.greeting)} (custom)` : 'custom…'}</option>
+              </select>
               <button className="mini" onClick={() => confirm(`Hapus @${c.username} dari pelanggan lama?`) && act({ type: 'delcustomer', username: c.username })}>Hapus</button>
             </span>
           </li>
