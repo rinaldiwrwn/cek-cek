@@ -653,6 +653,7 @@ function FollowupLine({ f, act }: { f: Followup; act: (b: unknown) => Promise<vo
     <span className={f.status === 'waiting' ? 'muted small' : 'small warnline'}>
       💬 Chat lanjutan: {label}{' '}
       {text && <button className="mini" onClick={() => setOpen(!open)}>{open ? 'Tutup' : 'Lihat isinya'}</button>}
+      <button className="mini" onClick={async () => { try { const j = await api('/api/action', { type: 'fudiag', username: f.username, day: f.day }); alert(j.lines.join('\n\n')); } catch (e) { alert((e as Error).message); } }}>Diagnosa</button>
       <button className="mini" onClick={() => confirm(`Kirim chat lanjutan (${what}) ke @${f.username} sekarang?\n\n${text}\n\nPelanggan harus sudah membalas DM-mu dalam 24 jam terakhir, kalau belum Instagram menolaknya.`) && act({ type: 'followup', username: f.username, day: f.day })}>Kirim sekarang</button>
       {open && text && <span className="small pre">{text}</span>}
     </span>
