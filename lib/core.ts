@@ -85,6 +85,20 @@ export async function syncMedia(force = false) {
   );
 }
 
+/** Membaca komentar sebuah postingan sekarang juga, tanpa menunggu jadwal berkala. */
+export async function syncPostNow(postId: string) {
+  const r = await q('UPDATE posts SET last_sync = $2 WHERE id = $1 RETURNING id', [postId, iso(Date.now())]);
+  if (!r.length) throw new Error('Lelang tidak ditemukan');
+  await syncComments(postId);
+  await setKv('lastOk', Date.now());
+}
+
+/** Membaca komentar semua postingan yang tampil di dashboard sekarang juga. */
+export async function syncAllComments() {
+  const posts = await q(`SELECT id FROM posts WHERE ${VISIBLE}`);
+  await Promise.all(posts.map((p) => syncPostNow(p.id).catch(noteError)));
+}
+
 export type PostPatch = {
   title?: string;
   openBid?: number | null;

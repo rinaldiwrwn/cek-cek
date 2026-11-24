@@ -60,6 +60,7 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   tidak memengaruhi bid asli (bid tertinggi, acuan "+", Sniper Zone), dan tidak dihitung di kartu. Ia bisa dipilih
   sebagai pemenang untuk menguji alur DM yang asli; hasil uji tidak dihitung di rekap pemenang. Komentar akun lain
   berformat sama diperlakukan sebagai bid biasa. Lelang lama tetap dibaca tiap jam supaya komentar barunya muncul.
+- Di tiap lelang, **↻ Muat ulang komentar** membaca komentar postingan itu sekarang juga, dan tulisan "Komentar terakhir dibaca" menunjukkan kapan terakhir kali. **Muat ulang postingan** di atas membaca daftar postingan dan komentar semuanya. Komentar lelang lama dibaca otomatis tiap 30 menit sampai 24 jam setelah close, lalu tiap jam.
 - Tombol **🧪 Tes DM** di detail lelang menguji DM ke akun lain (mis. akun kedua milikmu) tanpa menetapkan pemenang:
   pilih akun yang sudah berkomentar di postingan itu, periksa isinya (DM pemenang ditambah tautan postingan), lalu kirim.
   Komentar akun itu dibaca langsung dari Instagram kalau postingannya sudah lama. Satu komentar hanya bisa dibalas satu
