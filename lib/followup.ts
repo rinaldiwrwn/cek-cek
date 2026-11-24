@@ -24,8 +24,32 @@ export const fmtRbK = (n: number) => fmtNum(n) + (n >= 1000 ? 'k' : 'rb');
 
 export const packingFee = () => Math.max(0, Number(process.env.PACKING_FEE ?? 5) || 0); // rb per barang
 
-export type Greeting = 'om' | 'ka';
-export const greetingWord = (g: string | null | undefined) => (g === 'ka' ? 'kaa' : 'om');
+/** Merapikan sapaan: tanpa karakter kontrol, spasi tunggal, maksimal 20 karakter. Kosong menjadi "om". */
+export const GREETING_MAX = 20;
+export const cleanGreeting = (g: unknown): string =>
+  String(g ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, GREETING_MAX) || 'om';
+/**
+ * Sapaan yang disimpan, tiga macam: "om", "ka" (ditulis "kaa"), atau custom. Custom ditulis persis seperti yang diketik
+ * (huruf besar kecil ikut): "Mann" tetap "Mann", "mann" tetap "mann". Hanya "om" dan "ka"/"kaa" yang punya arti sendiri,
+ * dan itu tidak peka huruf besar kecil ("OM" menjadi om, "KAA" menjadi ka).
+ */
+export function formatGreeting(g: unknown): string {
+  const s = cleanGreeting(g);
+  const l = s.toLowerCase();
+  if (l === 'om') return 'om';
+  if (l === 'ka' || l === 'kaa') return 'ka';
+  return s;
+}
+export type GreetingKind = 'om' | 'ka' | 'custom';
+export const greetingKind = (g: unknown): GreetingKind => {
+  const s = formatGreeting(g);
+  return s === 'om' || s === 'ka' ? s : 'custom';
+};
+/** Kata yang ditulis di pesan: sapaan apa adanya, kecuali "ka" yang ditulis "kaa". */
+export const greetingWord = (g: string | null | undefined) => {
+  const s = cleanGreeting(g);
+  return s.toLowerCase() === 'ka' ? 'kaa' : s;
+};
 
 export const NEW_CUSTOMER_TEXT = 'Saya minta alamat lengkap dan kontak penerimanya yaa, untuk dicek ongkirnya dulu';
 

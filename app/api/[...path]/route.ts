@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, customerAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { addVerifiedMany, getState, syncAllComments, syncPostNow, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, testDm, setAutoDm, setAutoReply, setAutoFollowup, setCustomer, removeCustomer, processFollowup, diagnoseFollowup, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
+import { addVerifiedMany, getState, syncAllComments, syncPostNow, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, testDm, setAutoDm, setAutoReply, setAutoFollowup, setCustomer, getCustomer, removeCustomer, processFollowup, diagnoseFollowup, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -81,6 +81,13 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     if (!cronAuthed(req)) return json({ error: 'Tidak diizinkan' }, 401);
     after(() => tick(true).catch(console.error));
     return json({ ok: true });
+  }
+
+  // Dari webapp ongkir: mengecek apakah username sudah ada di database pemenang lama.
+  if (name === 'customer' && !post) {
+    if (!customerAuthed(req)) return json({ error: 'Tidak diizinkan' }, 401);
+    const c = await getCustomer(new URL(req.url).searchParams.get('username') || '').catch(() => null);
+    return json({ exists: !!c, customer: c ? { ongkir: c.ongkir, greeting: c.greeting } : null });
   }
 
   // Dari webapp ongkir: menyimpan pelanggan lama (username, ongkir dalam ribuan, sapaan). Memakai token sendiri, bukan sesi dashboard.
