@@ -298,6 +298,24 @@ test('bid uji dari akun uji: bohongan, bebas aturan, tidak memengaruhi bid asli'
   }
 });
 
+test('nama variabel akun uji: TEST_ACCOUNTS atau TEST_ACCOUNT, beberapa akun dipisah koma', () => {
+  const v = { ...rules, verified: new Set<string>() };
+  const isTest = (env: Record<string, string>) => {
+    delete process.env.TEST_ACCOUNTS; delete process.env.TEST_ACCOUNT;
+    Object.assign(process.env, env);
+    return evaluate([c(1, 'sakatimepiece', 'Tes, 300', -50)], v).rows[0].isTest;
+  };
+  try {
+    assert.equal(isTest({ TEST_ACCOUNTS: 'rinaldiwrwn,sakatimepiece' }), true);
+    assert.equal(isTest({ TEST_ACCOUNTS: '@RinaldiWrwn, SakaTimePiece' }), true);
+    assert.equal(isTest({ TEST_ACCOUNT: 'sakatimepiece' }), true); // salah ketik tanpa S tetap bekerja
+    assert.equal(isTest({ TEST_ACCOUNTS: 'rinaldiwrwn' }), false);
+    assert.equal(isTest({}), false);
+  } finally {
+    delete process.env.TEST_ACCOUNTS; delete process.env.TEST_ACCOUNT;
+  }
+});
+
 test('pemenang bawaan', () => {
   const top = (extra: Partial<CommentIn> = {}) => evaluate([c(1, 'a', '100', 3600), c(2, 'b', '+50', 3000, extra)], rules).top;
   assert.equal(autoWinnerReason(top(), undefined), null); // belum disahkan dan bukan akun sah
