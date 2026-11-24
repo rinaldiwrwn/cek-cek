@@ -1,4 +1,4 @@
-import { parseBid, amountText } from './parse';
+import { parseBid, amountText, norm } from './parse';
 
 export const SNIPER_MS = 5 * 60_000;
 
@@ -45,6 +45,7 @@ export type BidRow = CommentIn & {
   autoRejected: boolean; // ditolak otomatis: melanggar aturan lelang (sama atau lebih rendah dari bid sebelumnya, terlambat, bukan kelipatan, terhapus, dan sebagainya) dan belum kamu putuskan
   autoApproved: boolean; // disahkan otomatis: akun ada di daftar akun sah dan bid-nya tidak kena penanda apa pun
   isBid: boolean;
+  isTest: boolean; // bid uji dari akun uji ("Tes, 300"): tidak ikut aturan dan tidak memengaruhi bid asli
   amount: number | null;
   flags: Flag[];
   valid: boolean;
@@ -57,6 +58,25 @@ const byTime = (a: CommentIn, b: CommentIn) =>
  * Menilai komentar secara berurutan. Hasilnya hanya saran: keputusan manual
  * (override) selalu menang, dan "+50" dihitung dari bid sah tertinggi saat itu.
  */
+/** Akun uji (variabel TEST_ACCOUNTS, dipisah koma), mis. akun kedua milikmu. Hanya akun ini yang boleh membuat bid uji. */
+export function testAccounts(): Set<string> {
+  return new Set(
+    String(process.env.TEST_ACCOUNTS || '')
+      .split(/[\s,]+/)
+      .map((s) => s.replace(/^@/, '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+export const isTestAccount = (username: string | null | undefined) => !!username && testAccounts().has(username.toLowerCase());
+
+/** Format bid uji: awalan "tes" atau "test" lalu nominal biasa, mis. "Tes, 300" atau "tes 1500". Mengembalikan nominalnya. */
+export function parseTestBid(text: string): number | null {
+  const m = norm(text || '').trim().match(/^(?:tes|test)\b[\s,:.\-–]*(.+)$/i);
+  if (!m) return null;
+  const p = parseBid(m[1]);
+  return p && p.kind === 'abs' ? p.value : null;
+}
+
 export function evaluate(comments: CommentIn[], r: Rules) {
   const rows: BidRow[] = [];
   const eligible = new Set<string>(); // punya bid sah sebelum sniper zone
@@ -64,12 +84,21 @@ export function evaluate(comments: CommentIn[], r: Rules) {
   const minBids = r.sniperMinBids ?? 2;
   const sniperStart = r.closeAt != null ? r.closeAt - SNIPER_MS : null;
   let top: BidRow | null = null;
+  const tests = testAccounts();
 
   for (const c of [...comments].sort(byTime)) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
+    // Bid uji: dari akun uji dengan format "Tes, 300". Tidak kena aturan lelang (terlambat, tidak lebih tinggi, dan sebagainya),
+    // dan tidak masuk hitungan bid asli (bid tertinggi, acuan "+", syarat Sniper Zone). Bisa dipilih sebagai pemenang uji.
+    const testAmount = !own && tests.has(c.username.toLowerCase()) ? parseTestBid(c.text) : null;
+    if (testAmount != null) {
+      const ok = !c.deleted && c.override !== 'invalid';
+      rows.push({ ...c, own, verified: true, imported: false, relative: false, solid: ok, autoApproved: ok, autoRejected: false, isBid: true, isTest: true, amount: testAmount, flags: [], valid: ok });
+      continue;
+    }
     const p = own ? null : parseBid(c.text);
     if (!p) {
-      rows.push({ ...c, own, verified: false, imported: false, relative: false, solid: false, autoApproved: false, autoRejected: false, isBid: false, amount: null, flags: [], valid: false });
+      rows.push({ ...c, own, verified: false, imported: false, relative: false, solid: false, autoApproved: false, autoRejected: false, isBid: false, isTest: false, amount: null, flags: [], valid: false });
       continue;
     }
     const ref: BidRow | null = top; // bid acuan untuk bid berawalan "+"
@@ -102,7 +131,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     // nanti kamu tolak, totalnya berubah. Karena itu bid "+" baru dianggap pasti kalau seluruh rantai acuannya pasti.
     const approved = c.override === 'valid' || autoApproved;
     const solid = valid && approved && (p.kind !== 'rel' || !!ref?.solid);
-    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', solid, autoApproved, autoRejected: !c.override && !valid, isBid: true, amount, flags, valid };
+    const row: BidRow = { ...c, own, verified, imported: !!r.imported?.has(c.username), relative: p.kind === 'rel', solid, autoApproved, autoRejected: !c.override && !valid, isBid: true, isTest: false, amount, flags, valid };
     rows.push(row);
 
     if (valid) {
@@ -156,7 +185,7 @@ export function winnerBidForDm(rows: BidRow[], winner: { username: string; amoun
   return ok.sort((a, b) => b.ts - a.ts)[0] ?? null;
 }
 
-export const DM_TEMPLATE = 'Menang yaa untuk lelang {barang} di harga {harga} 🥳';
+export const DM_TEMPLATE = 'Menang yaa untuk lelang {barang} di harga {harga} 🥳\n{tautan}';
 
 /**
  * Mengisi template DM pemenang: {barang} dengan nama barang/jam lelangnya, {harga} dengan harga menang (dalam ribuan),

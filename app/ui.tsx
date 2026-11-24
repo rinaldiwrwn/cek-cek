@@ -260,7 +260,7 @@ export function Dashboard() {
           className={state.autoDm.on ? 'on-switch' : ''}
           aria-pressed={state.autoDm.on}
           onClick={() => {
-            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]') + '" sekitar ' + (state.dmDelaySec >= 60 ? `${Math.round(state.dmDelaySec / 60)} menit` : `${Math.round(state.dmDelaySec)} detik`) + ' kemudian, hanya kalau bid kemenangannya sudah disahkan, harganya pasti, dan tidak melanggar aturan lelang. Bid yang masih perlu kamu cek tidak memicu DM. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
+            if (!state.autoDm.on && !confirm('Nyalakan DM otomatis ke pemenang?\n\nSetelah lelang close dan pemenangnya ditetapkan, pemenang dikirimi DM "' + state.dmTemplate.replace('{barang}', '[nama barang]').replace('{harga}', '[harga menang]').replace('{tautan}', '[tautan postingan]') + '" sekitar ' + (state.dmDelaySec >= 60 ? `${Math.round(state.dmDelaySec / 60)} menit` : `${Math.round(state.dmDelaySec)} detik`) + ' kemudian, hanya kalau bid kemenangannya sudah disahkan, harganya pasti, dan tidak melanggar aturan lelang. Bid yang masih perlu kamu cek tidak memicu DM. Hanya lelang yang close SETELAH ini yang diproses. DM tidak bisa ditarik kembali, jadi periksa pemenang dalam masa tenang itu: mengubah hasil lelang membatalkan DM yang belum terkirim.')) return;
             act({ type: 'autodm', on: !state.autoDm.on });
           }}
         >
@@ -273,7 +273,7 @@ export function Dashboard() {
           Notif otomasi{freshAuto ? ` (${freshAuto} baru)` : ''}
         </button>
         <button aria-expanded={showWinners} onClick={() => setShowWinners(!showWinners)}>
-          Pemenang ({state.results.filter((r) => r.status === 'winner').length})
+          Pemenang ({state.results.filter((r) => r.status === 'winner' && !r.test).length})
         </button>
         <button aria-expanded={showVerified} onClick={() => setShowVerified(!showVerified)}>
           Akun sah ({state.verifiedCount})
@@ -339,7 +339,7 @@ function buildFeed(state: State): FeedItem[] {
       if (r.own) continue;
       if (r.isBid) {
         const hard = r.flags.filter((f) => !SOFT.includes(f)).map((f) => FLAGS[f]);
-        add(`b${r.id}`, r.ts, `Bid ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}${r.autoRejected ? ' · ditolak otomatis' : ''}` : ''}`, hard.length ? 'warn' : '', 'bid', r.id);
+        add(`b${r.id}`, r.ts, `Bid${r.isTest ? ' TES' : ''} ${rb(r.amount)} dari @${r.username}${hard.length ? ` · ${hard.join(', ')}${r.autoRejected ? ' · ditolak otomatis' : ''}` : ''}`, hard.length ? 'warn' : '', 'bid', r.id);
       } else add(`c${r.id}`, r.ts, `@${r.username}: ${r.text}`, 'chat', 'bid', r.id);
       if (r.deleted) add(`d${r.id}`, r.deletedAt, `@${r.username} menghapus ${r.isBid ? `bid ${rb(r.amount)}` : 'komentar'}`, 'bad', 'bid', r.id);
       if (r.repliedAuto && r.repliedAt) add(`ra${r.id}`, r.repliedAt, `Balasan otomatis terkirim ke @${r.username} (bid ${rb(r.amount)})`, 'ok', 'auto', r.id);
@@ -450,7 +450,7 @@ function EventSlot({ p, kind, now, act }: { p: Post; kind: Kind; now: number; ac
 
 function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: State['results'][number]; now: number; open: boolean; toggle: () => void; act: (b: unknown) => Promise<void> }) {
   const ph = phase(p, now);
-  const bids = p.rows.filter((r) => r.isBid);
+  const bids = p.rows.filter((r) => r.isBid && !r.isTest); // bid uji tidak ikut dihitung
   // Perlu dicek: belum kamu putuskan, dan akunnya belum ada di daftar akun sah atau ada penanda.
   // Bid yang sudah otomatis ditolak (melanggar aturan) tidak perlu dicek lagi.
   const check = bids.filter((r) => !r.override && !r.autoApproved && !r.autoRejected).length;
@@ -599,8 +599,10 @@ function VerifiedPanel({ count, act }: { count: number; act: (b: unknown) => Pro
 function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unknown) => Promise<void> }) {
   // Bid sah tertinggi tiap akun, dari yang terbesar.
   const best = new Map<string, number>();
+  const testUsers = new Set(p.rows.filter((r) => r.isTest).map((r) => r.username));
   for (const r of p.rows) if (r.isBid && r.valid && r.amount != null) best.set(r.username, Math.max(best.get(r.username) ?? 0, r.amount));
-  const candidates = [...best].sort((a, b) => b[1] - a[1]);
+  // Bid asli lebih dulu (dari yang tertinggi), bid uji di urutan terakhir supaya tidak terpilih tanpa sengaja.
+  const candidates = [...best].sort((a, b) => Number(testUsers.has(a[0])) - Number(testUsers.has(b[0])) || b[1] - a[1]);
   const [pick, setPick] = useState('');
   const [editing, setEditing] = useState(false);
   const chosen = candidates.find(([u]) => u === pick) || candidates.find(([u]) => u !== result?.username) || candidates[0];
@@ -651,10 +653,10 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
           <div className="resultrow">
             <select aria-label="Pilih pemenang" value={chosen[0]} onChange={(e) => setPick(e.target.value)}>
               {candidates.map(([u, a], i) => (
-                <option key={u} value={u}>{`@${u} · ${rb(a)}${i === 0 ? ' (bid sah tertinggi)' : ''}${u === prev ? ' (pemenang sekarang)' : ''}`}</option>
+                <option key={u} value={u}>{`@${u} · ${rb(a)}${testUsers.has(u) ? ' (bid TES)' : i === 0 ? ' (bid sah tertinggi)' : ''}${u === prev ? ' (pemenang sekarang)' : ''}`}</option>
               ))}
             </select>
-            <button className="primary" onClick={() => confirm(`Tetapkan @${chosen[0]} sebagai pemenang dengan ${rb(chosen[1])}?`) && save({ status: 'winner', username: chosen[0], amount: chosen[1], note: prev && prev !== chosen[0] ? `Menggantikan @${prev}` : undefined })}>
+            <button className="primary" onClick={() => confirm(`Tetapkan @${chosen[0]} sebagai pemenang dengan ${rb(chosen[1])}?${testUsers.has(chosen[0]) ? `\n\nIni bid TES.${result ? ` Hasil lelang yang sekarang (@${result.username ?? 'No Winner'}) akan TERTIMPA.` : ''} Hasil tes tidak dihitung di rekap pemenang.` : ''}`) && save({ status: 'winner', username: chosen[0], amount: chosen[1], note: prev && prev !== chosen[0] ? `Menggantikan @${prev}` : undefined })}>
               {result ? 'Ganti pemenang' : 'Tetapkan pemenang'}
             </button>
           </div>
@@ -676,7 +678,9 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
 }
 
 /** Rekap pemenang: satu baris per akun, dengan jumlah menang, total nominal, dan barang yang dimenangkan. */
-function Winners({ results }: { results: Result[] }) {
+function Winners({ results: all }: { results: Result[] }) {
+  const results = all.filter((r) => !r.test); // hasil tes tidak dihitung
+  const tests = all.length - results.length;
   const byUser = new Map<string, Result[]>();
   for (const r of results) if (r.status === 'winner' && r.username) byUser.set(r.username, [...(byUser.get(r.username) || []), r]);
   const rows = [...byUser].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
@@ -710,6 +714,7 @@ function Winners({ results }: { results: Result[] }) {
           </table>
         </div>
       )}
+      {tests > 0 && <p className="muted small">Hasil tes (tidak dihitung di rekap): {tests}</p>}
       {none.length > 0 && (
         <p className="small">
           <strong>No Winner ({none.length}):</strong> <span className="muted">{none.map((r) => `${r.title}${r.note ? ` (${r.note})` : ''}`).join(' · ')}</span>
@@ -773,7 +778,8 @@ function Detail({ p, result, act }: { p: Post; result?: Result; act: (b: unknown
             if (!user || !user.trim()) return;
             try {
               const pv = await api('/api/action', { type: 'testdm', id: p.id, username: user, preview: true });
-              const text = prompt(`Komentar @${pv.username} yang akan dibalas: "${pv.comment}"\n\nIsi DM (bisa diedit, OK untuk mengirim ke @${pv.username}):`, pv.text);
+              const note = pv.hargaContoh ? `\nHarga tidak terbaca dari komentar itu, jadi dipakai harga contoh 300rb. Tulis angka biasa (mis. "tes, 300") kalau mau memakai harga dari komentar.` : '';
+              const text = prompt(`Komentar @${pv.username} (${time(pv.commentAt)}) yang akan dibalas: "${pv.comment}"${note}\n\nIsi DM (bisa diedit, OK untuk mengirim ke @${pv.username}):`, pv.text);
               if (!text || !text.trim()) return;
               await api('/api/action', { type: 'testdm', id: p.id, username: user, text: text.trim() });
               alert(`DM tes terkirim. Cek DM atau permintaan pesan di akun @${pv.username}.`);
@@ -807,7 +813,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
       <span className="who">
         <span className="user">
           @{r.username}{r.own ? ' (kamu)' : ''}
-          {r.isBid && r.verified && (
+          {r.isBid && r.verified && !r.isTest && (
             <button
               className="trusted"
               title={r.imported ? 'Akun ini ada di daftar dari impor followers, belum kamu sahkan sendiri. Ketuk untuk mengeluarkannya.' : 'Akun ini ada di daftar akun sah. Ketuk untuk mengeluarkannya.'}
@@ -818,12 +824,18 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
           )}
         </span>
         <span className="text">{r.text}</span>
-        {r.isBid && r.relative && (r.override === 'valid' || r.autoApproved) && !r.own && !r.deleted && (
+        {r.isBid && !r.isTest && r.relative && (r.override === 'valid' || r.autoApproved) && !r.own && !r.deleted && (
           <button className="mini replybtn" onClick={reply} title="Kirim balasan ke komentar ini di Instagram">
             {r.repliedAt ? (r.repliedAuto ? '✓ Dibalas otomatis' : '✓ Sudah dibalas') : '💬 Balas sah'}
           </button>
         )}
-        {r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved || r.replyFailedAt || (r.relative && r.valid && !r.solid)) && (
+        {r.isTest && (
+          <span className="flags">
+            <span className="flag manual" title="Dari akun uji. Tidak ikut aturan lelang dan tidak memengaruhi bid asli.">TES · bid bohongan</span>
+            {r.deleted && <span className="flag">Terhapus</span>}
+          </span>
+        )}
+        {!r.isTest && r.isBid && (r.flags.length > 0 || r.override || !r.verified || r.autoApproved || r.replyFailedAt || (r.relative && r.valid && !r.solid)) && (
           <span className="flags">
             {r.override && <span className="flag manual">{r.override === 'valid' ? 'Disahkan' : 'Ditolak'}</span>}
             {r.autoApproved && <span className="flag ok">Disahkan otomatis</span>}
@@ -839,7 +851,7 @@ function BidRow({ r, top, act }: { r: Row; top: boolean; act: (b: unknown) => Pr
         <span className="amount">
           <strong>{rb(r.amount)}</strong>
           <span className="decide">
-            <button className={r.override === 'valid' || r.autoApproved ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid' || r.autoApproved}>✅</button>
+            {!r.isTest && <button className={r.override === 'valid' || r.autoApproved ? 'on ok' : ''} onClick={() => set('valid')} aria-label="Sah" title="Sah: bid dihitung, akun masuk daftar akun sah" aria-pressed={r.override === 'valid' || r.autoApproved}>✅</button>}
             <button className={r.override === 'invalid' || r.override === 'wrong' || r.autoRejected ? 'on bad' : ''} onClick={() => set('invalid')} aria-label="Tolak" title="Tolak: bid ini tidak dihitung" aria-pressed={r.override === 'invalid' || r.autoRejected}>❌</button>
           </span>
         </span>

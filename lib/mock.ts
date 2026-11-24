@@ -35,6 +35,8 @@ function init(): Store {
     });
     let amount = 100;
     s.comments[id] = [];
+    // Contoh bid uji, hanya kalau akun ujinya diatur (TEST_ACCOUNTS=sakatimepiece).
+    if (i === 1 && /sakatimepiece/i.test(process.env.TEST_ACCOUNTS || '')) s.comments[id].push({ id: String(s.seq++), parentId: null, username: 'sakatimepiece', text: 'Tes, 300', ts: now - 3 * 60_000 });
     if (i === 0) s.comments[id].push({ id: String(s.seq++), parentId: null, username: 'kolektor88', text: '+50', ts: now - 20 * 60_000 }); // contoh bid dengan +
     for (let k = 0; k < 2 + (i % 4); k++) {
       const ts = now - (40 - k * 9 - i) * 60_000;

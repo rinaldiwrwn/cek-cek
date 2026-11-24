@@ -55,6 +55,11 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   18:59:59") kalau sudah terbaca, dan jam saat Instagram membalas permintaan ("terkirim") kalau belum.
 - Pemenang bawaan ditetapkan 15 detik setelah close (`AUTO_RESULT_GRACE_SEC`), menunggu komentar menit-menit terakhir
   yang telat terbaca.
+- **Bid uji** dari akun uji (variabel `TEST_ACCOUNTS`, mis. `sakatimepiece`): komentar berformat `Tes, 300` dari akun itu
+  menjadi bid bohongan bertanda "TES". Ia tidak kena aturan lelang (terlambat, tidak lebih tinggi, dan sebagainya),
+  tidak memengaruhi bid asli (bid tertinggi, acuan "+", Sniper Zone), dan tidak dihitung di kartu. Ia bisa dipilih
+  sebagai pemenang untuk menguji alur DM yang asli; hasil uji tidak dihitung di rekap pemenang. Komentar akun lain
+  berformat sama diperlakukan sebagai bid biasa. Lelang lama tetap dibaca tiap jam supaya komentar barunya muncul.
 - Tombol **🧪 Tes DM** di detail lelang menguji DM ke akun lain (mis. akun kedua milikmu) tanpa menetapkan pemenang:
   pilih akun yang sudah berkomentar di postingan itu, periksa isinya (DM pemenang ditambah tautan postingan), lalu kirim.
   Komentar akun itu dibaca langsung dari Instagram kalau postingannya sudah lama. Satu komentar hanya bisa dibalas satu

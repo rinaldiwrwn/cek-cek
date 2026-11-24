@@ -2,7 +2,7 @@
 import { getKv, q, setKv } from './db';
 import * as ig from './ig';
 import { amountText, cleanUsername, parseBid, parseCaption, splitUsernames } from './parse';
-import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
+import { autoReplyTargets, autoWinnerReason, DM_TEMPLATE, dmMessage, evaluate, isTestAccount, SNIPER_MS, winnerBidForDm, type CommentIn } from './bids';
 
 const MIN = 60_000;
 const LOOKAHEAD = 75_000; // komentar yang jatuh tempo dalam 75 detik diambil oleh tick ini
@@ -139,7 +139,7 @@ function syncInterval(closeAt: number | null, now: number): number | null {
   if (d > -2 * MIN) return 8_000;
   if (d > -30 * MIN) return 2 * MIN;
   if (d > -24 * 60 * MIN) return 30 * MIN;
-  return null;
+  return 60 * MIN; // lelang lama tetap dibaca tiap jam supaya komentar barunya (termasuk bid uji) muncul di dashboard
 }
 const isHot = (closeAt: number | null, now: number) => closeAt != null && closeAt - now <= 10 * MIN && closeAt - now > -2 * MIN;
 
@@ -252,7 +252,7 @@ async function countValidBids(postId: string) {
     comments.map((c) => ({ id: c.id, parentId: c.parent_id, username: c.username, text: c.text, ts: toMs(c.ts)!, deleted: c.deleted_at != null, override: c.override })),
     { openBid: p.open_bid, increment: p.increment, maxJump: p.max_jump, closeAt: toMs(p.close_at), ownUsername: me?.username || null, sniperMinBids: SNIPER_MIN_BIDS },
   );
-  return rows.filter((r) => r.isBid && r.valid).length;
+  return rows.filter((r) => r.isBid && r.valid && !r.isTest).length;
 }
 
 async function fire(ev: { post_id: string; kind: Kind; due_at: unknown }) {
@@ -667,10 +667,11 @@ export async function testDm(postId: string, rawUser: string, text?: string, pre
   const pick = cands.find((c) => !c.parentId) ?? cands[0];
   const parsed = parseBid(pick.text);
   const tpl = dmTemplate();
-  // Harga hanya bisa dibaca dari komentar angka biasa; untuk "+50" dan sejenisnya diberi penanda supaya kamu isi sendiri.
-  const harga = parsed?.kind === 'abs' ? amountText(parsed.value) : '[harga]';
+  // Harga uji dibaca dari komentar angka biasa ("tes, 300"). Kalau tidak terbaca, dipakai harga contoh dan diberi tahu.
+  const hargaContoh = parsed?.kind !== 'abs';
+  const harga = parsed?.kind === 'abs' ? amountText(parsed.value) : amountText(300);
   const message = dmMessage((tpl.includes('{tautan}') ? tpl : `${tpl}\n{tautan}`).replace(/\{harga\}/g, harga), post.title, null, post.permalink);
-  if (preview) return { username, comment: pick.text, text: message };
+  if (preview) return { username, comment: pick.text, commentAt: pick.ts, hargaContoh, text: message };
   const final = String(text || '').trim() || message;
   if (final.length > 900) throw new Error('Pesan terlalu panjang');
   if (Date.now() - pick.ts > DM_WINDOW) throw new Error('Komentar itu sudah lebih dari 7 hari, melewati batas Instagram untuk DM lewat komentar');
@@ -774,6 +775,7 @@ export async function getState() {
       postId: r.post_id as string, status: r.status as 'winner' | 'none', username: r.username as string | null,
       amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null, auto: !!r.auto,
       dmText: dmMessage(dmTemplate(), r.title, r.amount, r.permalink),
+      test: isTestAccount(r.username),
       dm: r.dm_status ? { status: r.dm_status as 'sending' | 'sent' | 'failed', username: r.dm_username as string | null, at: toMs(r.dm_at), error: r.dm_error as string | null, auto: !!r.dm_auto } : null,
     })),
     posts: posts.map((p) => {
