@@ -667,7 +667,9 @@ export async function testDm(postId: string, rawUser: string, text?: string, pre
   const pick = cands.find((c) => !c.parentId) ?? cands[0];
   const parsed = parseBid(pick.text);
   const tpl = dmTemplate();
-  const message = dmMessage(tpl.includes('{tautan}') ? tpl : `${tpl}\n{tautan}`, post.title, parsed?.kind === 'abs' ? parsed.value : null, post.permalink);
+  // Harga hanya bisa dibaca dari komentar angka biasa; untuk "+50" dan sejenisnya diberi penanda supaya kamu isi sendiri.
+  const harga = parsed?.kind === 'abs' ? amountText(parsed.value) : '[harga]';
+  const message = dmMessage((tpl.includes('{tautan}') ? tpl : `${tpl}\n{tautan}`).replace(/\{harga\}/g, harga), post.title, null, post.permalink);
   if (preview) return { username, comment: pick.text, text: message };
   const final = String(text || '').trim() || message;
   if (final.length > 900) throw new Error('Pesan terlalu panjang');
