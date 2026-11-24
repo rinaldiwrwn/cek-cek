@@ -40,6 +40,7 @@ const SCHEMA = [
   // Pelanggan lama: ongkirnya (ribuan) dan sapaannya ('om' | 'ka').
   `CREATE TABLE IF NOT EXISTS customers (username text PRIMARY KEY, ongkir integer NOT NULL, greeting text NOT NULL DEFAULT 'om', updated_at timestamptz NOT NULL)`,
   // Chat lanjutan per pemenang per hari (WIB). status: waiting | sending | sent | failed | unsure | expired.
+  `ALTER TABLE customers ALTER COLUMN ongkir TYPE double precision`,
   `CREATE TABLE IF NOT EXISTS followups (
      username text NOT NULL, day text NOT NULL, status text NOT NULL, kind text, text text, reason text,
      error text, checked_at timestamptz, sent_at timestamptz, PRIMARY KEY (username, day))`,

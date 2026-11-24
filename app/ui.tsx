@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { State } from '@/lib/core';
 import { amountText, extractUsernames } from '@/lib/parse';
-import { dayKey, greetingWord } from '@/lib/followup';
+import { dayKey, fmtNum, greetingWord } from '@/lib/followup';
+
+/** Angka dari isian: koma atau titik sebagai desimal (18,5 atau 18.5). */
+const parseNum = (s: string) => Number(String(s).trim().replace(',', '.'));
 
 type Post = State['posts'][number];
 type Row = Post['rows'][number];
@@ -660,10 +663,10 @@ function FollowupLine({ f, isCustomer, advanced, act }: { f: Followup; isCustome
       {!isCustomer && (
         <button className="mini" onClick={async () => {
           const ong = prompt(`Ongkir @${f.username} (ribuan, mis. 18). Disimpan sebagai pelanggan lama:`);
-          if (ong == null || ong.trim() === '' || !Number.isFinite(Number(ong))) return;
+          if (ong == null || ong.trim() === '' || !Number.isFinite(parseNum(ong))) return;
           const g = prompt('Sapaan: ketik "om" atau "ka" (kaa)', 'om');
           if (g == null) return;
-          await act({ type: 'customer', username: f.username, ongkir: Number(ong), greeting: g.trim().toLowerCase() === 'ka' ? 'ka' : 'om' });
+          await act({ type: 'customer', username: f.username, ongkir: parseNum(ong), greeting: g.trim().toLowerCase() === 'ka' ? 'ka' : 'om' });
         }}>Jadikan pelanggan lama</button>
       )}
       {advanced && (
@@ -695,7 +698,7 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
   const [find, setFind] = useState('');
   const shown = customers.filter((c) => c.username.includes(find.trim().replace(/^@/, '').toLowerCase()));
   const save = async (username: string, ong: string, g: string) => {
-    await act({ type: 'customer', username, ongkir: Number(ong), greeting: g });
+    await act({ type: 'customer', username, ongkir: parseNum(ong), greeting: g });
   };
   return (
     <section className="note verified customers">
@@ -715,7 +718,7 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
         }}
       >
         <input placeholder="@username" value={user} onChange={(e) => setUser(e.target.value)} aria-label="Username" />
-        <input placeholder="Ongkir (rb)" inputMode="numeric" value={ongkir} onChange={(e) => setOngkir(e.target.value.replace(/\D/g, ''))} aria-label="Ongkir dalam ribuan" />
+        <input placeholder="Ongkir (rb)" inputMode="decimal" value={ongkir} onChange={(e) => setOngkir(e.target.value.replace(/[^0-9.,]/g, ''))} aria-label="Ongkir dalam ribuan" />
         <select value={greeting} onChange={(e) => setGreeting(e.target.value as 'om' | 'ka')} aria-label="Sapaan">
           <option value="om">om</option>
           <option value="ka">kaa</option>
@@ -727,10 +730,10 @@ function CustomersPanel({ customers, packingNote, act }: { customers: State['cus
         {shown.map((c) => (
           <li key={c.username}>
             <span>
-              @{c.username} <span className="muted small">· ongkir {c.ongkir}rb · sapaan {greetingWord(c.greeting)}</span>
+              @{c.username} <span className="muted small">· ongkir {fmtNum(c.ongkir)}rb · sapaan {greetingWord(c.greeting)}</span>
             </span>
             <span>
-              <button className="mini" onClick={() => { const v = prompt(`Ongkir baru untuk @${c.username} (ribuan):`, String(c.ongkir)); if (v != null && v.trim() !== '' && Number.isFinite(Number(v))) save(c.username, v.trim(), c.greeting); }}>Ubah ongkir</button>
+              <button className="mini" onClick={() => { const v = prompt(`Ongkir baru untuk @${c.username} (ribuan):`, fmtNum(c.ongkir)); if (v != null && v.trim() !== '' && Number.isFinite(parseNum(v))) save(c.username, v.trim(), c.greeting); }}>Ubah ongkir</button>
               <button className="mini" onClick={() => save(c.username, String(c.ongkir), c.greeting === 'ka' ? 'om' : 'ka')}>Sapaan: {greetingWord(c.greeting)}</button>
               <button className="mini" onClick={() => confirm(`Hapus @${c.username} dari pelanggan lama?`) && act({ type: 'delcustomer', username: c.username })}>Hapus</button>
             </span>

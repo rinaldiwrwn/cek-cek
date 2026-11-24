@@ -1,6 +1,5 @@
 // Chat lanjutan setelah DM pemenang: rekap total untuk pelanggan lama, atau permintaan alamat untuk pelanggan baru.
 // Isi pesan dan keputusan kapan boleh dikirim ada di sini sebagai fungsi murni supaya mudah diuji.
-import { amountText } from './parse';
 
 export const WIB_MS = 7 * 3_600_000;
 export const DAY_MS = 24 * 3_600_000;
@@ -14,6 +13,15 @@ export const dayKey = (ms: number) => new Date(ms + WIB_MS).toISOString().slice(
 /** Awal hari WIB (dalam ms UTC) dari kunci tanggalnya. */
 export const dayStart = (key: string) => Date.parse(`${key}T00:00:00Z`) - WIB_MS;
 
+/** Angka ribuan gaya chat lelang, sama dengan webapp ongkir: 18.5 -> "18,5", 1250 -> "1.250", 373 -> "373". */
+export function fmtNum(n: number) {
+  const [i, d] = (Math.round(n * 100) / 100).toFixed(2).split('.');
+  const dec = d.replace(/0+$/, '');
+  return i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (dec ? `,${dec}` : '');
+}
+/** "rb" di bawah sejuta, "k" untuk sejuta ke atas (1.250k). */
+export const fmtRbK = (n: number) => fmtNum(n) + (n >= 1000 ? 'k' : 'rb');
+
 export const packingFee = () => Math.max(0, Number(process.env.PACKING_FEE ?? 5) || 0); // rb per barang
 
 export type Greeting = 'om' | 'ka';
@@ -26,15 +34,15 @@ export function recapExpression(amounts: number[], ongkir: number, packing = pac
   const parts: number[] = [];
   for (const a of amounts) parts.push(a, packing);
   parts.push(ongkir);
-  const total = parts.reduce((s, n) => s + n, 0);
-  return { expression: parts.join('+'), total };
+  const total = Math.round(parts.reduce((s, n) => s + n, 0) * 100) / 100;
+  return { expression: parts.map(fmtNum).join('+'), total };
 }
 
 /** Pesan rekap untuk pelanggan lama, dengan info transfer kalau TRANSFER_INFO diisi. */
 export function recapMessage(o: { amounts: number[]; ongkir: number; greeting?: string | null; transfer?: string | null; packing?: number }) {
   const g = greetingWord(o.greeting);
   const { expression, total } = recapExpression(o.amounts, o.ongkir, o.packing);
-  const lines = [`Untuk totalnya jadi ${expression}=${amountText(total)} yaa ${g}`];
+  const lines = [`Untuk totalnya jadi ${expression}=${fmtRbK(total)} yaa ${g}`];
   const t = String(o.transfer || '').trim();
   if (t) lines.push('', `Transfernya kesini ya ${g}:`, t);
   return { text: lines.join('\n'), total };

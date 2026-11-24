@@ -59,6 +59,7 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   - **Pelanggan lama** (daftar *Pelanggan lama*, berisi ongkir dalam ribuan dan sapaan om/kaa): rekap `harga1+packing+harga2+packing+…+ongkir=total` untuk semua lelang yang dimenangkannya di hari (WIB) yang sama. Rekap menunggu sampai semua lelang hari itu selesai dan semua kemenangannya sudah di-DM, supaya totalnya tidak kurang. Packing `PACKING_FEE` (bawaan 5) per barang; info rekening dari `TRANSFER_INFO`.
   - **Pelanggan baru** (tidak ada di daftar): langsung diminta alamat lengkap dan kontak penerima (`FOLLOWUP_NEW_TEXT`); ongkirnya kamu cek sendiri.
   - Hanya DM pemenang yang terkirim setelah fitur dinyalakan yang diproses.
+  - **Dari webapp ongkir:** isi `CUSTOMER_API_TOKEN` (rahasia panjang, acak). Webapp lain bisa menyimpan pelanggan lama dengan `POST /api/customer`, header `Authorization: Bearer <token>`, isi JSON `{"username": "budi.watch", "ongkir": 18.5, "greeting": "ka"}` (ongkir dalam ribuan, boleh desimal; sapaan `om` atau `ka`). Tanpa token, pintu itu tertutup.
 - **Bid uji** dari akun uji (variabel `TEST_ACCOUNTS`, mis. `sakatimepiece`): komentar berformat `Tes, 300` dari akun itu
   menjadi bid bohongan bertanda "TES". Ia tidak kena aturan lelang (terlambat, tidak lebih tinggi, dan sebagainya),
   tidak memengaruhi bid asli (bid tertinggi, acuan "+", Sniper Zone), dan tidak dihitung di kartu. Ia bisa dipilih

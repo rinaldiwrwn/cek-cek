@@ -25,3 +25,10 @@ export function cronAuthed(req: Request): boolean {
     req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || new URL(req.url).searchParams.get('key') || '';
   return same(given, secret);
 }
+
+/** Pintu masuk untuk aplikasi lain (mis. webapp ongkir) yang mengirim data pelanggan. Mati kalau CUSTOMER_API_TOKEN kosong. */
+export function customerAuthed(req: Request): boolean {
+  const secret = process.env.CUSTOMER_API_TOKEN;
+  if (!secret) return false;
+  return same(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '', secret);
+}

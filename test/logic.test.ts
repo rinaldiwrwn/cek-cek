@@ -368,6 +368,9 @@ test('chat lanjutan: rekap pelanggan lama dan permintaan alamat pelanggan baru',
   // Total sejuta ke atas memakai penulisan k.
   assert.match(recapMessage({ amounts: [1500], ongkir: 20, packing: 5 }).text, /=1\.525k yaa om/);
 
+  // Ongkir desimal ditulis dengan koma, sama seperti webapp ongkir.
+  assert.equal(recapMessage({ amounts: [350], ongkir: 18.5, greeting: 'om', packing: 5 }).text, 'Untuk totalnya jadi 350+5+18,5=373,5rb yaa om');
+
   assert.equal(dayKey(Date.parse('2026-11-23T18:00:00Z')), '2026-11-24'); // 01.00 WIB sudah hari berikutnya
 
   const now = Date.parse('2026-11-24T10:00:00Z');
