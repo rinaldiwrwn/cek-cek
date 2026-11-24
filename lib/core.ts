@@ -754,15 +754,21 @@ export async function setAutoFollowup(on: boolean) {
   await setKv('autoFollowup', { on, since: Date.now() });
 }
 
-export async function setCustomer(rawUser: string, ongkir: number, greeting: string) {
+export async function setCustomer(rawUser: string, ongkir: number, greeting: string, opts: { overwrite?: boolean } = {}) {
   const username = cleanUsername(rawUser);
   if (!username) throw new Error('Username tidak valid');
   if (!Number.isFinite(ongkir) || ongkir < 0 || ongkir > 100_000) throw new Error('Ongkir tidak valid (isi dalam ribuan, mis. 18 atau 18,5)');
+  const row = (await q('SELECT ongkir, greeting FROM customers WHERE username = $1', [username]))[0];
+  const previous = row ? { ongkir: row.ongkir as number, greeting: row.greeting as string } : null;
+  // overwrite: false = jangan timpa akun yang sudah ada (pemanggil bertanya dulu ke pengguna).
+  if (previous && opts.overwrite === false) return { previous, written: false };
   await q(
     `INSERT INTO customers (username, ongkir, greeting, updated_at) VALUES ($1,$2,$3,$4)
      ON CONFLICT (username) DO UPDATE SET ongkir = $2, greeting = $3, updated_at = $4`,
     [username, Math.round(ongkir * 100) / 100, greeting === 'ka' ? 'ka' : 'om', iso(Date.now())],
   );
+  // Data lama (kalau akunnya sudah ada) dikembalikan supaya penyimpanan yang menimpa bisa diberitahukan ke pemanggil.
+  return { previous, written: true };
 }
 
 export async function removeCustomer(rawUser: string) {

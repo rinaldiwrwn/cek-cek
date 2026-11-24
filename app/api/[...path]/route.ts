@@ -88,8 +88,11 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     if (!customerAuthed(req)) return json({ error: 'Tidak diizinkan' }, 401);
     const b = await req.json().catch(() => ({}));
     try {
-      await setCustomer(String(b.username ?? ''), Number(b.ongkir), String(b.greeting ?? 'om'));
-      return json({ ok: true });
+      // overwrite: false = tanya dulu kalau akunnya sudah ada (409 berisi data lamanya, tidak ada yang berubah).
+      // Tanpa isian itu (pemanggil lama), akun yang sudah ada diperbarui seperti sebelumnya.
+      const r = await setCustomer(String(b.username ?? ''), Number(b.ongkir), String(b.greeting ?? 'om'), { overwrite: b.overwrite !== false });
+      if (!r.written) return json({ error: 'Akun sudah ada di daftar.', exists: true, previous: r.previous }, 409);
+      return json({ ok: true, updated: !!r.previous, previous: r.previous });
     } catch (e) {
       return json({ error: String((e as Error).message) }, 400);
     }
