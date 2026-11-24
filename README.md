@@ -55,6 +55,10 @@ otomatis "10 Menit" (10 menit sebelum close), "Sniper Zone" (5 menit sebelum clo
   18:59:59") kalau sudah terbaca, dan jam saat Instagram membalas permintaan ("terkirim") kalau belum.
 - Pemenang bawaan ditetapkan 15 detik setelah close (`AUTO_RESULT_GRACE_SEC`), menunggu komentar menit-menit terakhir
   yang telat terbaca.
+- **Chat lanjutan otomatis** (tombol *Auto-chat lanjutan*, mati bawaannya): setelah pemenang **membalas** DM kemenangannya, dikirim pesan kedua. Instagram hanya mengizinkan pesan kedua kalau pelanggan sudah membalas (jendela 24 jam sejak balasannya), jadi tanpa balasan tidak ada yang terkirim, dan pesannya bisa dikirim manual dari kartu lelang (*Kirim sekarang*). Balasan dicek tiap menit lewat percakapan Instagram.
+  - **Pelanggan lama** (daftar *Pelanggan lama*, berisi ongkir dalam ribuan dan sapaan om/kaa): rekap `harga1+packing+harga2+packing+…+ongkir=total` untuk semua lelang yang dimenangkannya di hari (WIB) yang sama. Rekap menunggu sampai semua lelang hari itu selesai dan semua kemenangannya sudah di-DM, supaya totalnya tidak kurang. Packing `PACKING_FEE` (bawaan 5) per barang; info rekening dari `TRANSFER_INFO`.
+  - **Pelanggan baru** (tidak ada di daftar): langsung diminta alamat lengkap dan kontak penerima (`FOLLOWUP_NEW_TEXT`); ongkirnya kamu cek sendiri.
+  - Hanya DM pemenang yang terkirim setelah fitur dinyalakan yang diproses.
 - **Bid uji** dari akun uji (variabel `TEST_ACCOUNTS`, mis. `sakatimepiece`): komentar berformat `Tes, 300` dari akun itu
   menjadi bid bohongan bertanda "TES". Ia tidak kena aturan lelang (terlambat, tidak lebih tinggi, dan sebagainya),
   tidak memengaruhi bid asli (bid tertinggi, acuan "+", Sniper Zone), dan tidak dihitung di kartu. Ia bisa dipilih

@@ -356,3 +356,39 @@ test('keputusan manual dan bid dihapus', () => {
   assert.equal(kembali.rows[0].valid, true);
   assert.equal(kembali.top?.id, '1');
 });
+
+test('chat lanjutan: rekap pelanggan lama dan permintaan alamat pelanggan baru', async () => {
+  const { recapMessage, decideFollowup, dayKey } = await import('../lib/followup');
+  // Satu barang, sapaan om, tanpa info transfer.
+  assert.equal(recapMessage({ amounts: [300], ongkir: 39, greeting: 'om', packing: 5 }).text, 'Untuk totalnya jadi 300+5+39=344rb yaa om');
+  // Empat barang: harga+packing diulang per barang, ongkir di akhir. Sapaan "ka" jadi "kaa", info transfer ikut.
+  const r = recapMessage({ amounts: [350, 200, 100, 120], ongkir: 18, greeting: 'ka', transfer: '123 a/n X', packing: 5 });
+  assert.equal(r.total, 350 + 200 + 100 + 120 + 4 * 5 + 18);
+  assert.equal(r.text, 'Untuk totalnya jadi 350+5+200+5+100+5+120+5+18=808rb yaa kaa\n\nTransfernya kesini ya kaa:\n123 a/n X');
+  // Total sejuta ke atas memakai penulisan k.
+  assert.match(recapMessage({ amounts: [1500], ongkir: 20, packing: 5 }).text, /=1\.525k yaa om/);
+
+  assert.equal(dayKey(Date.parse('2026-11-23T18:00:00Z')), '2026-11-24'); // 01.00 WIB sudah hari berikutnya
+
+  const now = Date.parse('2026-11-24T10:00:00Z');
+  const base = { now, firstDmAt: now - 3_600_000, undecided: 0, customer: { ongkir: 18, greeting: 'ka' }, lastReplyAt: now - 60_000 };
+  const w = (id: string, amount: number, dmSent = true) => ({ postId: id, amount, closeAt: now - 7_200_000 + Number(id) * 1000, dmSent });
+  // Belum membalas, atau balasan lebih lama dari DM: menunggu.
+  assert.equal(decideFollowup({ ...base, wins: [w('1', 100)], lastReplyAt: null }).action, 'wait');
+  assert.equal(decideFollowup({ ...base, wins: [w('1', 100)], lastReplyAt: base.firstDmAt - 1 }).action, 'wait');
+  // Pelanggan baru: langsung minta alamat, tidak menunggu lelang lain.
+  const nu = decideFollowup({ ...base, customer: null, wins: [w('1', 100)], undecided: 3 });
+  assert.deepEqual([nu.action, (nu as any).kind], ['send', 'new']);
+  assert.match((nu as any).text, /alamat lengkap dan kontak penerimanya/);
+  // Pelanggan lama: tunggu lelang lain yang belum selesai, dan DM kemenangan lain yang belum terkirim.
+  assert.equal(decideFollowup({ ...base, wins: [w('1', 100)], undecided: 2 }).action, 'wait');
+  assert.equal(decideFollowup({ ...base, wins: [w('1', 100), w('2', 50, false)] }).action, 'wait');
+  // Kirim manual boleh melewati syarat itu.
+  assert.equal(decideFollowup({ ...base, wins: [w('1', 100), w('2', 50, false)], force: true }).action, 'send');
+  // Semua siap: jumlah sesuai urutan close.
+  const ok = decideFollowup({ ...base, wins: [w('2', 200), w('1', 100)] }) as any;
+  assert.equal(ok.kind, 'recap');
+  assert.match(ok.text, /100\+5\+200\+5\+18=328rb/);
+  // Jendela balasan 24 jam: sudah lewat, tidak dikirim otomatis.
+  assert.equal(decideFollowup({ ...base, wins: [w('1', 100)], firstDmAt: now - 48 * 3_600_000, lastReplyAt: now - 24 * 3_600_000 }).action, 'expired');
+});

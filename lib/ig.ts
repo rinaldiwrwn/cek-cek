@@ -179,7 +179,7 @@ export async function listComments(mediaId: string): Promise<IgComment[]> {
  * DM ke orang yang berkomentar lewat "Private Reply": satu pesan per komentar, dalam 7 hari sejak komentar dibuat.
  * Jalurnya memakai ID akun Instagram; kalau Meta meminta ID Halaman, isi IG_MESSAGES_ID.
  */
-export async function sendPrivateReply(commentId: string, text: string): Promise<string> {
+export async function sendPrivateReply(commentId: string, text: string): Promise<{ messageId: string; recipientId: string }> {
   if (isMock()) return mock.sendPrivateReply(commentId, text);
   const a = await account();
   const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
@@ -188,7 +188,39 @@ export async function sendPrivateReply(commentId: string, text: string): Promise
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text } }),
   });
+  return { messageId: String(j.message_id ?? j.id ?? ''), recipientId: String(j.recipient_id ?? '') };
+}
+
+/** Pesan biasa ke seorang pelanggan (ID Instagram-nya dari respons Private Reply). Hanya boleh dalam 24 jam sejak dia terakhir membalas. */
+export async function sendMessage(recipientId: string, text: string): Promise<string> {
+  if (isMock()) return mock.sendMessage(recipientId, text);
+  const a = await account();
+  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  const j = await request(`${a.base}${ver()}/${id}/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
+  });
   return String(j.message_id ?? j.id ?? '');
+}
+
+/** Kapan pelanggan itu terakhir mengirim pesan ke akunmu (ms), atau null kalau belum pernah. */
+export async function lastCustomerMessageAt(recipientId: string): Promise<number | null> {
+  if (isMock()) return mock.lastCustomerMessageAt(recipientId);
+  const a = await account();
+  const id = process.env.IG_MESSAGES_ID?.trim() || a.id;
+  const j = await request(
+    `${a.base}${ver()}/${id}/conversations?platform=instagram&user_id=${encodeURIComponent(recipientId)}&fields=messages.limit(10){id,created_time,from}`,
+  );
+  let last: number | null = null;
+  for (const conv of j.data || []) {
+    for (const m of conv.messages?.data || []) {
+      if (String(m.from?.id) !== String(recipientId)) continue; // hanya pesan dari pelanggan
+      const t = parseTs(m.created_time);
+      if (last == null || t > last) last = t;
+    }
+  }
+  return last;
 }
 
 /** Membalas sebuah komentar (harus komentar tingkat atas; balasan atas balasan tidak didukung Instagram). */
