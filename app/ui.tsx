@@ -367,6 +367,7 @@ function buildFeed(state: State): FeedItem[] {
     if (r.status !== 'winner' || !r.dm) continue;
     const base = { postId: r.postId, title: r.title, kind: 'auto' as const };
     if (r.dm.status === 'sent' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang terkirim ke @${r.dm.username}${r.dm.auto ? ' (otomatis)' : ''}`, tone: 'ok' });
+    else if (r.dm.status === 'unsure' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang ke @${r.dm.username}: Instagram melapor error, DM mungkin tetap terkirim. Cek kotak pesan.`, tone: 'warn' });
     else if (r.dm.status === 'failed' && r.dm.at) out.push({ ...base, key: `${r.postId}:dm`, t: r.dm.at, text: `DM pemenang ke @${r.dm.username} GAGAL${r.dm.error ? `: ${r.dm.error}` : ''}`, tone: 'bad' });
   }
   return out.sort((a, b) => b.t - a.t);
@@ -487,6 +488,7 @@ function PostCard({ p, result, now, open, toggle, act }: { p: Post; result?: Sta
         {result?.status === 'winner' && result.dm?.status === 'sent' && result.dm.username === result.username && (
           <span className="chip ok">✉ DM terkirim {time(result.dm.at!)}{result.dm.auto ? ' (otomatis)' : ''}</span>
         )}
+        {result?.status === 'winner' && result.dm?.status === 'unsure' && <span className="chip warn" title={result.dm.error || undefined}>✉ DM belum pasti</span>}
         {result?.status === 'winner' && result.dm?.status === 'failed' && <span className="chip bad" title={result.dm.error || undefined}>✉ DM gagal</span>}
         {result?.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && result.dm?.status !== 'sending' && (
           <button className="mini" onClick={() => askAndSendDm(p.id, result, act)} title={`Kirim DM ke @${result.username}`}>✉ Kirim DM</button>
@@ -637,6 +639,9 @@ function ResultBox({ p, result, act }: { p: Post; result?: Result; act: (b: unkn
         )}
         {result.status === 'winner' && result.dm?.status === 'failed' && (
           <span className="small warnline" title={result.dm.error || undefined}>⚠ DM ke @{result.dm.username} gagal{result.dm.error ? `: ${result.dm.error}` : ''}</span>
+        )}
+        {result.status === 'winner' && result.dm?.status === 'unsure' && (
+          <span className="small warnline" title={result.dm.error || undefined}>⚠ Instagram melapor error saat DM ke @{result.dm.username}, tapi DM mungkin sudah sampai. Cek kotak pesan penerima sebelum kirim ulang.</span>
         )}
         {result.status === 'winner' && result.dm?.status === 'sending' && <span className="muted small">DM sedang dikirim…</span>}
         {result.status === 'winner' && !(result.dm?.status === 'sent' && result.dm.username === result.username) && (

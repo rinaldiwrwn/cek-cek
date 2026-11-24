@@ -638,6 +638,12 @@ async function deliverDm(postId: string, username: string, comment: { id: string
     await q(`UPDATE results SET dm_status = 'sent', dm_at = $2 WHERE post_id = $1`, [postId, iso(Date.now())]);
   } catch (e) {
     const msg = String((e as Error)?.message || e).slice(0, 300);
+    if ((e as { ambiguous?: boolean })?.ambiguous) {
+      // Instagram kadang melapor error padahal DM-nya sampai. Tandai "belum pasti", jangan dicoba lagi otomatis.
+      const note = `${msg} (DM mungkin tetap terkirim, cek kotak pesan penerima)`;
+      await q(`UPDATE results SET dm_status = 'unsure', dm_error = $2 WHERE post_id = $1`, [postId, note]);
+      throw new Error(note);
+    }
     await q(`UPDATE results SET dm_status = 'failed', dm_error = $2 WHERE post_id = $1`, [postId, msg]);
     throw e;
   }
@@ -704,7 +710,7 @@ export async function autoDms() {
   const now = Date.now();
   const due = await q(
     `SELECT * FROM results WHERE status = 'winner' AND close_at > $1 AND close_at < $4 AND decided_at <= $2
-       AND NOT ((COALESCE(dm_status, '') IN ('sent', 'failed') AND COALESCE(dm_username, '') = username)
+       AND NOT ((COALESCE(dm_status, '') IN ('sent', 'failed', 'unsure') AND COALESCE(dm_username, '') = username)
              OR (COALESCE(dm_status, '') = 'sending' AND dm_at > $3))`,
     [iso(cfg.since), iso(now - AUTO_DM_DELAY), iso(now - 5 * MIN), iso(now)],
   );
@@ -720,7 +726,7 @@ export async function autoDms() {
       const link = (await q('SELECT permalink FROM posts WHERE id = $1', [res.post_id]))[0]?.permalink;
       await deliverDm(res.post_id, res.username, bid, dmMessage(dmTemplate(), res.title, res.amount, link), true);
     } catch (e) {
-      await noteError(`DM otomatis ke @${res.username} gagal: ${String((e as Error)?.message || e)}`);
+      await noteError(`DM otomatis ke @${res.username} gagal/belum pasti: ${String((e as Error)?.message || e)}`);
     }
     await sleep(1200);
   }
@@ -791,7 +797,7 @@ export async function getState() {
       amount: r.amount as number | null, title: r.title as string, closeAt: toMs(r.close_at), note: r.note as string | null, auto: !!r.auto,
       dmText: dmMessage(dmTemplate(), r.title, r.amount, r.permalink),
       test: isTestAccount(r.username),
-      dm: r.dm_status ? { status: r.dm_status as 'sending' | 'sent' | 'failed', username: r.dm_username as string | null, at: toMs(r.dm_at), error: r.dm_error as string | null, auto: !!r.dm_auto } : null,
+      dm: r.dm_status ? { status: r.dm_status as 'sending' | 'sent' | 'failed' | 'unsure', username: r.dm_username as string | null, at: toMs(r.dm_at), error: r.dm_error as string | null, auto: !!r.dm_auto } : null,
     })),
     posts: posts.map((p) => {
       const closeAt = toMs(p.close_at);

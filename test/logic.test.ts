@@ -260,6 +260,8 @@ test('bid uji dari akun uji: bohongan, bebas aturan, tidak memengaruhi bid asli'
   assert.equal(parseTestBid('tes'), null);
   assert.equal(parseTestBid('+50'), null);
   assert.equal(parseTestBid('testimoni 300'), null);
+  assert.equal(parseTestBid('Tes, OB', 100), 100); // OB = harga open bid lelangnya
+  assert.equal(parseTestBid('tes ob'), null); // tanpa open bid, tidak terbaca
 
   process.env.TEST_ACCOUNTS = 'sakatimepiece';
   try {

@@ -71,10 +71,11 @@ export function testAccounts(): Set<string> {
 export const isTestAccount = (username: string | null | undefined) => !!username && testAccounts().has(username.toLowerCase());
 
 /** Format bid uji: awalan "tes" atau "test" lalu nominal biasa, mis. "Tes, 300" atau "tes 1500". Mengembalikan nominalnya. */
-export function parseTestBid(text: string): number | null {
+export function parseTestBid(text: string, openBid?: number | null): number | null {
   const m = norm(text || '').trim().match(/^(?:tes|test)\b[\s,:.\-–]*(.+)$/i);
   if (!m) return null;
   const p = parseBid(m[1]);
+  if (p?.kind === 'ob') return openBid ?? null; // "Tes, OB" = harga open bid lelang itu
   return p && p.kind === 'abs' ? p.value : null;
 }
 
@@ -91,7 +92,7 @@ export function evaluate(comments: CommentIn[], r: Rules) {
     const own = !!r.ownUsername && c.username === r.ownUsername;
     // Bid uji: dari akun uji dengan format "Tes, 300". Tidak kena aturan lelang (terlambat, tidak lebih tinggi, dan sebagainya),
     // dan tidak masuk hitungan bid asli (bid tertinggi, acuan "+", syarat Sniper Zone). Bisa dipilih sebagai pemenang uji.
-    const testAmount = !own && tests.has(c.username.toLowerCase()) ? parseTestBid(c.text) : null;
+    const testAmount = !own && tests.has(c.username.toLowerCase()) ? parseTestBid(c.text, r.openBid) : null;
     if (testAmount != null) {
       const ok = !c.deleted && c.override !== 'invalid';
       rows.push({ ...c, own, verified: true, imported: false, relative: false, solid: ok, autoApproved: ok, autoRejected: false, isBid: true, isTest: true, amount: testAmount, flags: [], valid: ok });
