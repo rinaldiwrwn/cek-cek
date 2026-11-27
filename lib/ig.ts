@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { getKv, setKv } from './db';
 import * as mock from './mock';
+import { type Blocked, blockedMessage, blockRetryMs, isBlockedError, mayCall, PROBE_CLAIM_MS } from './igblock';
 
 export type Media = { id: string; caption: string; permalink: string; thumb: string | null; ts: number };
 export type IgComment = { id: string; parentId: string | null; username: string; text: string; ts: number };
@@ -43,12 +44,42 @@ async function tokenUncached(): Promise<string> {
   return t.value;
 }
 
+// Status blokir diingat sebentar di memori supaya tiap panggilan tidak membaca database.
+let blockMemo: { v: Blocked | null; at: number } | null = null;
+export async function getBlock(): Promise<Blocked | null> {
+  if (isMock()) return null;
+  if (blockMemo && Date.now() - blockMemo.at < 5_000) return blockMemo.v;
+  const v = (await getKv<Blocked>('igBlocked').catch(() => null)) || null;
+  blockMemo = { v, at: Date.now() };
+  return v;
+}
+async function setBlock(v: Blocked | null) {
+  blockMemo = { v, at: Date.now() };
+  await setKv('igBlocked', v).catch(() => {});
+}
+/** Menghapus status blokir, supaya panggilan berikutnya mencoba lagi (dipakai tombol "Coba lagi sekarang"). */
+export const clearBlock = () => setBlock(null);
+
 async function request(url: string, init?: RequestInit): Promise<any> {
+  // Selama masa blokir, tidak ada panggilan ke Instagram. Begitu jedanya lewat, SATU panggilan lolos sebagai percobaan.
+  const block = await getBlock();
+  if (block) {
+    if (!mayCall(block, Date.now())) {
+      const err = new Error(blockedMessage(block)) as Error & { blocked?: boolean };
+      err.blocked = true;
+      throw err;
+    }
+    await setBlock({ ...block, until: Date.now() + PROBE_CLAIM_MS }); // memesan percobaan ini
+  }
   const sep = url.includes('?') ? '&' : '?';
   const full = url.includes('access_token=') ? url : `${url}${sep}access_token=${encodeURIComponent(await token())}`;
   const r = await fetch(full, { ...init, cache: 'no-store' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.error) {
+    if (isBlockedError(j.error)) {
+      const e0 = j.error;
+      await setBlock({ at: Date.now(), until: Date.now() + blockRetryMs(), message: `kode ${e0.code ?? '?'}${e0.error_subcode != null ? ` · sub ${e0.error_subcode}` : ''}` });
+    }
     // Rincian dari Meta (kode, subkode, jejak) disertakan supaya penyebabnya bisa dilacak atau dilaporkan.
     const e = j.error || {};
     const detail = [`HTTP ${r.status}`, e.type, e.code != null && `kode ${e.code}`, e.error_subcode != null && `sub ${e.error_subcode}`, e.fbtrace_id && `trace ${e.fbtrace_id}`].filter(Boolean).join(' · ');
@@ -59,6 +90,7 @@ async function request(url: string, init?: RequestInit): Promise<any> {
     err.ambiguous = j.error?.code === 1 || j.error?.code === 2 || j.error?.is_transient === true || r.status >= 500;
     throw err;
   }
+  if (block) await setBlock(null); // percobaan berhasil: blokir sudah dicabut
   return j;
 }
 

@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { checkPassword, COOKIE, cronAuthed, customerAuthed, isAuthed, sessionValue } from '@/lib/auth';
-import { addVerifiedMany, getState, syncAllComments, syncPostNow, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, testDm, setAutoDm, setAutoReply, setAutoFollowup, setCustomer, getCustomer, removeCustomer, processFollowup, diagnoseFollowup, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
+import { addVerifiedMany, getState, syncAllComments, syncPostNow, importVerified, listVerified, refresh, removeImported, replyToBid, sendWinnerDm, testDm, setAutoDm, setAutoReply, setAutoFollowup, retryInstagram, setCustomer, getCustomer, removeCustomer, processFollowup, diagnoseFollowup, resetEvent, sendNow, setOverride, setResult, setSequence, setVerified, syncAutoResults, syncMedia, tick, updatePost } from '@/lib/core';
 import { isMock } from '@/lib/ig';
 
 // Semua endpoint ada di satu fungsi. Mode demo menyimpan datanya di memori, dan di Vercel
@@ -33,6 +33,7 @@ async function action(req: Request) {
     else if (b.type === 'reset' && ['ten', 'sniper', 'close'].includes(b.kind)) await resetEvent(String(b.id), b.kind);
     else if (b.type === 'testdm' && typeof b.username === 'string') return json({ ok: true, ...(await testDm(String(b.id), b.username, typeof b.text === 'string' ? b.text : undefined, !!b.preview)) });
     else if (b.type === 'autodm') await setAutoDm(!!b.on);
+    else if (b.type === 'unblock') await retryInstagram();
     else if (b.type === 'autofollowup') await setAutoFollowup(!!b.on);
     else if (b.type === 'customer') await setCustomer(String(b.username ?? ''), Number(b.ongkir), String(b.greeting ?? 'om'));
     else if (b.type === 'delcustomer') await removeCustomer(String(b.username ?? ''));
