@@ -231,7 +231,17 @@ export function Dashboard() {
       {state.mock && <p className="note">Mode demo: semua data di bawah ini palsu dan tidak ada komentar yang dikirim ke Instagram.</p>}
       {!state.setup.token && <p className="note warn">Token Instagram belum diisi (<code>IG_ACCESS_TOKEN</code>). Lihat langkah di README.</p>}
       {!state.setup.cron && !state.mock && <p className="note warn">Pemicu per menit belum diatur (<code>CRON_SECRET</code>). Komentar otomatis hanya jalan selama dashboard ini terbuka.</p>}
-      {(error || state.lastError) && <p className="note bad">{error || `${state.lastError!.message} (${time(state.lastError!.at)})`}</p>}
+      {state.igBlocked && (
+        <section className="note bad blocked">
+          <strong>Instagram memblokir akses API ({state.igBlocked.message}).</strong>
+          <span className="small">
+            Dashboard berhenti memanggil Instagram supaya tidak ada percobaan berulang. Komentar baru tidak terbaca, dan komentar serta DM tidak bisa dikirim sampai blokirnya dicabut.
+            Percobaan otomatis berikutnya sekitar {time(state.igBlocked.until)} WIB. Blokir seperti ini hanya bisa dicabut Meta, lewat banding di Business Support Home.
+          </span>
+          <button className="mini" onClick={() => act({ type: 'unblock' })}>Coba lagi sekarang</button>
+        </section>
+      )}
+      {(error || (state.lastError && !state.igBlocked)) && <p className="note bad">{error || `${state.lastError!.message} (${time(state.lastError!.at)})`}</p>}
 
       <div className="toolbar">
         <button onClick={() => act({ type: 'reload' })}>Muat ulang postingan</button>

@@ -178,3 +178,4 @@ button.attn { border-color: var(--warn); background: var(--warn-bg); color: var(
 .linkbtn { border: 1px solid var(--line); background: var(--card); color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; }
 .customfield { grid-column: 1 / -1; }
 .sapaansel { min-height: 28px; padding: 0 8px; font-size: 12px; border-radius: 999px; }
+.blocked { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }

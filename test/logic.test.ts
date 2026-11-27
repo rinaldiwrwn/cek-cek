@@ -409,3 +409,23 @@ test('chat lanjutan: rekap pelanggan lama dan permintaan alamat pelanggan baru',
   // Jendela balasan 24 jam: sudah lewat, tidak dikirim otomatis.
   assert.equal(decideFollowup({ ...base, wins: [w('1', 100)], firstDmAt: now - 48 * 3_600_000, lastReplyAt: now - 24 * 3_600_000 }).action, 'expired');
 });
+
+test('pemutus panggilan Instagram: mengenali blokir API dan menentukan kapan boleh mencoba lagi', async () => {
+  const { isBlockedError, mayCall, blockedMessage, blockRetryMs } = await import('../lib/igblock');
+  // Persis galat dari Meta di dashboard asli.
+  assert.equal(isBlockedError({ message: 'API access blocked.', code: 200, error_subcode: 5258005 }), true);
+  assert.equal(isBlockedError({ message: 'API access blocked.' }), true);
+  assert.equal(isBlockedError({ message: 'Permissions error', code: 200, error_subcode: 5258005 }), true); // subkode yang sama
+  // Galat lain bukan blokir: tetap diperlakukan seperti sebelumnya.
+  for (const e of [{ message: 'An unknown error has occurred', code: 1 }, { message: 'This message is sent outside of allowed window', code: 10, error_subcode: 2534022 }, { message: 'Invalid OAuth access token', code: 190 }, { message: 'Permissions error', code: 200 }, undefined, null]) {
+    assert.equal(isBlockedError(e as never), false, JSON.stringify(e));
+  }
+  const b = { at: 1_000, until: 1_000 + 3_600_000, message: 'kode 200 · sub 5258005' };
+  assert.equal(mayCall(null, 5), true);
+  assert.equal(mayCall(b, 1_001), false); // selama masa blokir: tidak ada panggilan
+  assert.equal(mayCall(b, b.until - 1), false);
+  assert.equal(mayCall(b, b.until), true); // jedanya lewat: satu percobaan boleh
+  assert.match(blockedMessage(b), /Instagram memblokir akses API \(kode 200 · sub 5258005\)/);
+  assert.match(blockedMessage(b), /Coba lagi sekarang/);
+  assert.equal(blockRetryMs(), 3_600_000); // bawaan 60 menit
+});

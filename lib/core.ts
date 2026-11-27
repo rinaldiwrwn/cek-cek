@@ -934,7 +934,7 @@ export async function setOverride(commentId: string, value: 'valid' | 'invalid' 
 }
 
 export async function getState() {
-  const [posts, comments, events, bidders, total, results, me, lastError, lastOk, autoReply, autoDm, autoFollowup, customers, followupRows] = await Promise.all([
+  const [posts, comments, events, bidders, total, results, me, lastError, lastOk, autoReply, autoDm, autoFollowup, customers, followupRows, igBlock] = await Promise.all([
     q(`SELECT * FROM posts WHERE ${VISIBLE} ORDER BY close_at ASC NULLS LAST, posted_at ASC`),
     q(`SELECT c.* FROM comments c JOIN posts p ON p.id = c.post_id WHERE ${VISIBLE.replace(/close_at|in_latest/g, 'p.$&')}`),
     q('SELECT e.*, c.ts AS ig_ts FROM events e LEFT JOIN comments c ON c.id = e.comment_id'),
@@ -949,6 +949,7 @@ export async function getState() {
     getAutoFollowup(),
     q('SELECT username, ongkir, greeting FROM customers ORDER BY username'),
     q(`SELECT * FROM followups WHERE day >= $1 ORDER BY day DESC, username`, [dayKey(Date.now() - 3 * DAY_MS)]),
+    ig.getBlock().catch(() => null),
   ]);
   const followups: { username: string; day: string; status: 'waiting' | 'sending' | 'sent' | 'failed' | 'unsure' | 'expired'; kind: 'recap' | 'new' | null; text: string | null; reason: string | null; error: string | null; sentAt: number | null; preview: { kind: 'recap' | 'new'; text: string; complete: boolean } | null }[] = await Promise.all(
     followupRows.map(async (f) => ({
@@ -997,6 +998,7 @@ export async function getState() {
     setup: { token: ig.hasToken(), cron: !!process.env.CRON_SECRET },
     me: me?.username || null,
     lastError: lastError && (!lastOk || lastError.at > lastOk) ? lastError : null,
+    igBlocked: igBlock ? { at: igBlock.at, until: igBlock.until, message: igBlock.message } : null, // Meta memblokir akses API
     texts: texts(),
     autoReply,
     autoDm,
@@ -1037,3 +1039,12 @@ export async function getState() {
 }
 
 export type State = Awaited<ReturnType<typeof getState>>;
+
+/**
+ * Mencoba Instagram lagi setelah diblokir: status blokir dihapus lalu satu panggilan baca dilakukan.
+ * Kalau masih diblokir, status blokir terpasang lagi dan panggilan berikutnya tetap dihentikan.
+ */
+export async function retryInstagram() {
+  await ig.clearBlock();
+  await syncMedia(true).catch(() => {});
+}
